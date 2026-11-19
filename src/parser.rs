@@ -96,6 +96,62 @@ pub trait Visitor {
 
 impl Visitor for () {}
 
+/// Runs two visitors in one parse: every callback goes to `A`, then to `B`.
+/// Nest tuples for more: `(a, (b, c))`. The parse stops early as soon as
+/// either visitor's [`Visitor::on_tick_end`] breaks.
+///
+/// ```no_run
+/// # use cs2_demo::{Demo, ParseOptions, StatsCollector, Context, Visitor};
+/// # struct MyAnalysis;
+/// # impl Visitor for MyAnalysis {}
+/// let demo = Demo::open("match.dem")?;
+/// let mut both = (StatsCollector::new(), MyAnalysis);
+/// let ctx = demo.parse(ParseOptions::default(), &mut both)?;
+/// let stats = both.0.into_stats(&ctx);
+/// # Ok::<(), cs2_demo::Error>(())
+/// ```
+impl<A: Visitor, B: Visitor> Visitor for (A, B) {
+    fn on_start(&mut self, ctx: &Context) {
+        self.0.on_start(ctx);
+        self.1.on_start(ctx);
+    }
+
+    fn on_game_event(&mut self, ctx: &Context, event: &GameEvent) {
+        self.0.on_game_event(ctx, event);
+        self.1.on_game_event(ctx, event);
+    }
+
+    fn on_entity(&mut self, ctx: &Context, entity: &Entity, op: EntityOp, changed: &[FieldPath]) {
+        self.0.on_entity(ctx, entity, op, changed);
+        self.1.on_entity(ctx, entity, op, changed);
+    }
+
+    fn on_string_table(&mut self, ctx: &Context, table: &str, entries: &[usize]) {
+        self.0.on_string_table(ctx, table, entries);
+        self.1.on_string_table(ctx, table, entries);
+    }
+
+    fn on_net_message(&mut self, ctx: &Context, msg_type: u32, data: &[u8]) {
+        self.0.on_net_message(ctx, msg_type, data);
+        self.1.on_net_message(ctx, msg_type, data);
+    }
+
+    fn on_tick_end(&mut self, ctx: &Context) -> ControlFlow<()> {
+        let a = self.0.on_tick_end(ctx);
+        let b = self.1.on_tick_end(ctx);
+        if a.is_break() || b.is_break() {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    }
+
+    fn on_finish(&mut self, ctx: &Context) {
+        self.0.on_finish(ctx);
+        self.1.on_finish(ctx);
+    }
+}
+
 /// Game state at the current point of the parse.
 pub struct Context {
     header: DemoHeader,
@@ -597,5 +653,68 @@ fn read_varint(data: &[u8], pos: &mut usize) -> Result<u64> {
         if shift >= 70 {
             return Err(Error::malformed("varint too long"));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Default)]
+    struct Recorder {
+        calls: Vec<&'static str>,
+        stop: bool,
+    }
+
+    impl Visitor for Recorder {
+        fn on_start(&mut self, _: &Context) {
+            self.calls.push("start");
+        }
+        fn on_game_event(&mut self, _: &Context, _: &GameEvent) {
+            self.calls.push("event");
+        }
+        fn on_string_table(&mut self, _: &Context, _: &str, _: &[usize]) {
+            self.calls.push("table");
+        }
+        fn on_net_message(&mut self, _: &Context, _: u32, _: &[u8]) {
+            self.calls.push("message");
+        }
+        fn on_tick_end(&mut self, _: &Context) -> ControlFlow<()> {
+            self.calls.push("tick");
+            if self.stop {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        }
+        fn on_finish(&mut self, _: &Context) {
+            self.calls.push("finish");
+        }
+    }
+
+    #[test]
+    fn tuple_visitor_forwards_every_callback() {
+        let ctx = Context::new(DemoHeader::default());
+        let ev = GameEvent {
+            tick: 0,
+            name: Arc::from("x"),
+            fields: Vec::new(),
+        };
+        let mut v = (
+            Recorder::default(),
+            Recorder {
+                stop: true,
+                ..Default::default()
+            },
+        );
+        v.on_start(&ctx);
+        v.on_game_event(&ctx, &ev);
+        v.on_string_table(&ctx, "t", &[]);
+        v.on_net_message(&ctx, 1, &[]);
+        assert!(v.on_tick_end(&ctx).is_break(), "the second visitor breaks");
+        v.on_finish(&ctx);
+        let expected = ["start", "event", "table", "message", "tick", "finish"];
+        assert_eq!(v.0.calls, expected);
+        assert_eq!(v.1.calls, expected);
     }
 }

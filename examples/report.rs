@@ -1,10 +1,11 @@
-//! Writes a Markdown report for one or more demos: result, scoreboard, round
-//! history, kill feed, the consistency checks the parser ran, and timings.
+//! Writes a Markdown report for one or more demos: result, scoreboard, side
+//! splits, rounds with both teams' buys, clutches, utility and aim, highlights,
+//! kill feed, the consistency checks the parser ran, and timings.
 //!
 //! cargo run --release --example report -- a.dem [b.dem ...] > report.md
 
 use cs2_demo::entities::FieldPath;
-use cs2_demo::stats::{MatchStats, PlayerStats};
+use cs2_demo::stats::{BuyType, MatchStats, PlayerStats};
 use cs2_demo::{
     Context, Demo, Entity, EntityOp, GameEvent, ParseOptions, RoundEndReason, StatsCollector, Visitor,
 };
@@ -45,10 +46,9 @@ fn main() -> Res<()> {
     Ok(())
 }
 
-/// Runs the built-in stats and counts what the parser delivered.
+/// Counts what the parser delivered (runs next to the `StatsCollector`).
 #[derive(Default)]
 struct Collect {
-    stats: StatsCollector,
     game_events: u64,
     entity_updates: u64,
     ticks: u64,
@@ -59,10 +59,6 @@ struct Collect {
 }
 
 impl Visitor for Collect {
-    fn on_start(&mut self, ctx: &Context) {
-        self.stats.on_start(ctx);
-    }
-
     fn on_game_event(&mut self, ctx: &Context, ev: &GameEvent) {
         self.game_events += 1;
         match &*ev.name {
@@ -81,19 +77,17 @@ impl Visitor for Collect {
             }
             _ => {}
         }
-        self.stats.on_game_event(ctx, ev);
     }
 
-    fn on_entity(&mut self, ctx: &Context, e: &Entity, op: EntityOp, changed: &[FieldPath]) {
+    fn on_entity(&mut self, _ctx: &Context, _e: &Entity, op: EntityOp, _changed: &[FieldPath]) {
         if matches!(op, EntityOp::Created | EntityOp::Updated) {
             self.entity_updates += 1;
         }
-        self.stats.on_entity(ctx, e, op, changed);
     }
 
-    fn on_tick_end(&mut self, ctx: &Context) -> ControlFlow<()> {
+    fn on_tick_end(&mut self, _ctx: &Context) -> ControlFlow<()> {
         self.ticks += 1;
-        self.stats.on_tick_end(ctx)
+        ControlFlow::Continue(())
     }
 }
 
@@ -130,11 +124,12 @@ fn analyze(path: &Path) -> Res<Analysis> {
     ready?;
     let (events, t_events) = timed(|| demo.parse(ParseOptions::events_only(), &mut ()));
     events?;
-    let mut c = Collect::default();
-    let (ctx, t_full) = timed(|| demo.parse(ParseOptions::default(), &mut c));
+    let mut both = (StatsCollector::new(), Collect::default());
+    let (ctx, t_full) = timed(|| demo.parse(ParseOptions::default(), &mut both));
     let ctx = ctx?;
+    let (collector, mut c) = both;
     let post_match = std::mem::take(&mut c.post_match);
-    let stats = std::mem::take(&mut c.stats).into_stats(&ctx);
+    let stats = collector.into_stats(&ctx);
     let h = demo.header();
 
     // Teams, winner first.
@@ -197,8 +192,12 @@ fn analyze(path: &Path) -> Res<Analysis> {
     }
 
     write_scoreboard(&mut s, &stats, &team_order)?;
+    write_sides(&mut s, &stats, &team_order)?;
     write_details(&mut s, &stats, &team_order)?;
+    write_utility_aim(&mut s, &stats, &team_order)?;
     write_rounds(&mut s, &stats, &team_order)?;
+    write_economy(&mut s, &stats, &team_order)?;
+    write_clutches(&mut s, &stats)?;
     write_highlights(&mut s, &stats)?;
     write_kill_feed(&mut s, &stats)?;
 
@@ -395,6 +394,152 @@ fn write_scoreboard(s: &mut String, stats: &MatchStats, team_order: &[String]) -
     Ok(())
 }
 
+/// Rating and ADR on each side.
+fn write_sides(s: &mut String, stats: &MatchStats, team_order: &[String]) -> std::fmt::Result {
+    writeln!(s, "\n### T and CT sides\n")?;
+    writeln!(
+        s,
+        "| Player | T rounds | T K–D | T ADR | T rating | CT rounds | CT K–D | CT ADR | CT rating | Impact* | Rating 2.0* |"
+    )?;
+    writeln!(s, "|---|--:|:-:|--:|--:|--:|:-:|--:|--:|--:|--:|")?;
+    for p in ordered(stats, team_order) {
+        writeln!(
+            s,
+            "| {} | {} | {}–{} | {:.1} | {:.2} | {} | {}–{} | {:.1} | {:.2} | {:.2} | {:.2} |",
+            md(&p.name),
+            p.t.rounds_played,
+            p.t.kills,
+            p.t.deaths,
+            p.t.adr(),
+            p.t.rating(),
+            p.ct.rounds_played,
+            p.ct.kills,
+            p.ct.deaths,
+            p.ct.adr(),
+            p.ct.rating(),
+            p.impact(),
+            p.rating2_approx()
+        )?;
+    }
+    writeln!(
+        s,
+        "\n\\* Community approximations: HLTV has not published the Impact and Rating 2.0 formulas."
+    )
+}
+
+/// Players in scoreboard order: winner first, then anyone without a team.
+fn ordered<'a>(stats: &'a MatchStats, team_order: &[String]) -> Vec<&'a PlayerStats> {
+    let rank = |p: &PlayerStats| {
+        team_order
+            .iter()
+            .position(|t| *t == p.team_name)
+            .unwrap_or(team_order.len())
+    };
+    let mut players: Vec<&PlayerStats> = stats.players.iter().collect();
+    players.sort_by_key(|p| rank(p));
+    players
+}
+
+fn write_utility_aim(s: &mut String, stats: &MatchStats, team_order: &[String]) -> std::fmt::Result {
+    writeln!(s, "\n### Utility and aim\n")?;
+    writeln!(
+        s,
+        "| Player | Blind s / flash | Flashes → kill | Unused utility | Shots | Accuracy | Head hits | First shot | Stopped | Crosshair | Time to kill |"
+    )?;
+    writeln!(s, "|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|")?;
+    for p in ordered(stats, team_order) {
+        let a = &p.aim;
+        writeln!(
+            s,
+            "| {} | {:.2} | {} | \\${} | {} | {:.0} % | {:.0} % | {:.0} % | {:.0} % | {} | {} |",
+            md(&p.name),
+            p.blind_time_per_flash(),
+            p.flashes_leading_to_kill,
+            p.utility_unused_value,
+            a.shots,
+            a.accuracy() * 100.0,
+            a.head_hit_ratio() * 100.0,
+            a.first_shot_accuracy() * 100.0,
+            a.accurate_speed_ratio() * 100.0,
+            a.crosshair_placement().map_or("–".into(), |v| format!("{v:.1}°")),
+            a.time_to_kill().map_or("–".into(), |v| format!("{v:.2} s"))
+        )?;
+    }
+    writeln!(
+        s,
+        "\nAim: a hit is damage to an enemy in the tick of the shot. *Stopped*: rifle, sniper and pistol shots fired \
+         below 34 % of the weapon's maximum speed. *Crosshair*: median angle to the enemy's head 0.2 s before the first \
+         shot of an engagement. Approximate: demos are recorded at 64 tick."
+    )
+}
+
+/// Rounds won with each buy, per team.
+fn write_economy(s: &mut String, stats: &MatchStats, team_order: &[String]) -> std::fmt::Result {
+    writeln!(s, "\n### Economy\n")?;
+    // `\$`: GitHub renders text between two dollar signs as math.
+    writeln!(
+        s,
+        "Rounds won by the team's buy (equipment value per player when freeze time ends: eco under \\$1,000, \
+         semi-eco under \\$2,000, force under \\$4,000).\n"
+    )?;
+    write!(s, "| Team |")?;
+    for b in BuyType::ALL {
+        write!(s, " {} |", b.label())?;
+    }
+    writeln!(s, "\n|---|{}", "--:|".repeat(BuyType::ALL.len()))?;
+    for team in team_order {
+        write!(s, "| {} |", md(team))?;
+        for b in BuyType::ALL {
+            let (mut played, mut won) = (0, 0);
+            for r in &stats.rounds {
+                for side in [cs2_demo::Team::Terrorist, cs2_demo::Team::CounterTerrorist] {
+                    if r.team_name(side) == team && r.economy(side).is_some_and(|e| e.buy == b) {
+                        played += 1;
+                        won += (r.winner == Some(side)) as u32;
+                    }
+                }
+            }
+            if played == 0 {
+                write!(s, " – |")?;
+            } else {
+                write!(s, " {won}/{played} |")?;
+            }
+        }
+        s.push('\n');
+    }
+    Ok(())
+}
+
+fn write_clutches(s: &mut String, stats: &MatchStats) -> std::fmt::Result {
+    writeln!(s, "\n### Clutches\n")?;
+    let won: Vec<String> = stats
+        .clutches
+        .iter()
+        .filter(|c| c.won)
+        .map(|c| {
+            format!(
+                "{} 1v{} in round {} ({} kill{})",
+                md(&c.name),
+                c.opponents,
+                c.round,
+                c.kills,
+                if c.kills == 1 { "" } else { "s" }
+            )
+        })
+        .collect();
+    writeln!(
+        s,
+        "{} clutches, {} won{}",
+        stats.clutches.len(),
+        won.len(),
+        if won.is_empty() {
+            ".".to_string()
+        } else {
+            format!(": {}.", won.join("; "))
+        }
+    )
+}
+
 fn write_details(s: &mut String, stats: &MatchStats, team_order: &[String]) -> std::fmt::Result {
     writeln!(s, "\n### Duels, utility and objectives\n")?;
     writeln!(
@@ -460,8 +605,11 @@ fn how(reason: Option<RoundEndReason>, bomb_planted: bool) -> &'static str {
 fn write_rounds(s: &mut String, stats: &MatchStats, team_order: &[String]) -> std::fmt::Result {
     writeln!(s, "\n### Rounds\n")?;
     let [a, b] = [0, 1].map(|i| team_order.get(i).map_or(String::new(), |n| md(n)));
-    writeln!(s, "| # | Winner | Side | How | {a} – {b} | Kills |")?;
-    writeln!(s, "|--:|---|:-:|---|:-:|--:|")?;
+    writeln!(
+        s,
+        "| # | Winner | Side | How | {a} – {b} | Kills | {a} buy | {b} buy | Bomb |"
+    )?;
+    writeln!(s, "|--:|---|:-:|---|:-:|--:|---|---|:-:|")?;
     let mut wins: HashMap<&str, u32> = HashMap::new();
     for r in &stats.rounds {
         let winner = r.winner_name.as_deref().unwrap_or("?");
@@ -471,16 +619,31 @@ fn write_rounds(s: &mut String, stats: &MatchStats, team_order: &[String]) -> st
                 .get(i)
                 .map_or(0, |n| wins.get(n.as_str()).copied().unwrap_or(0))
         };
+        let buy = |i: usize| {
+            let Some(name) = team_order.get(i) else {
+                return String::new();
+            };
+            [cs2_demo::Team::Terrorist, cs2_demo::Team::CounterTerrorist]
+                .into_iter()
+                .find(|&side| r.team_name(side) == name)
+                .and_then(|side| r.economy(side))
+                .map_or(String::new(), |e| {
+                    format!("{} (\\${}k)", e.buy.label(), e.equipment_value / 1000)
+                })
+        };
         writeln!(
             s,
-            "| {} | {} | {} | {} | {} – {} | {} |",
+            "| {} | {} | {} | {} | {} – {} | {} | {} | {} | {} |",
             r.number,
             md(winner),
             r.winner.map_or("?", |t| t.short_name()),
             how(r.reason, r.bomb_planted),
             score(0),
             score(1),
-            r.kills
+            r.kills,
+            buy(0),
+            buy(1),
+            r.bomb_site.map_or("", |b| b.name())
         )?;
     }
     if stats.rounds.first().is_some_and(|r| r.number > 1) {

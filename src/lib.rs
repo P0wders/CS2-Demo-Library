@@ -23,19 +23,26 @@
 //! Layers, from low to high level:
 //! * [`container`]: frames of the `.dem` file.
 //! * [`parser`]: net messages, string tables, game events and entities,
-//!   delivered to a [`Visitor`].
+//!   delivered to a [`Visitor`] (a tuple of visitors runs them all in one parse).
 //! * [`model`]: typed views (players, teams, game rules) over entity state.
-//! * [`stats`]: a ready-made analyzer producing a [`stats::MatchStats`] scoreboard.
+//! * [`stats`]: a ready-made analyzer producing [`stats::MatchStats`]: the
+//!   scoreboard with T/CT splits, every player's round, team economy and buy
+//!   types, clutches, every grenade with its lineup and effect, and aim.
+//! * [`replay`]: positions over time, for 2D replays.
+//! * [`maps`]: radar calibration, from world positions to radar pixels.
+//! * [`scouting`]: team and player profiles over many matches
+//!   (see [`match_stats_many`] to parse them in parallel).
 //!
 //! ## Performance
 //! On a 342 MB, 48-minute pro demo (Ryzen 7 5800X): ready for the first tick in
 //! 6 ms, events only 0.13 s (~2.6 GB/s), full entity state 1.95 s (~175 MB/s),
-//! single-threaded, with ~12 MB of memory besides the memory-mapped file. Skip
-//! what you don't need with [`ParseOptions`]; parse several demos on several
-//! threads for throughput.
+//! [`Demo::match_stats`] 2.1 s, single-threaded, with ~12 MB of memory besides
+//! the memory-mapped file. Skip what you don't need with [`ParseOptions`];
+//! parse several demos on several threads for throughput.
 //!
 //! ## Features
-//! * `serde`: `serde::Serialize` for [`stats::MatchStats`] and its parts.
+//! * `serde`: `serde::Serialize` and `Deserialize` for [`stats::MatchStats`]
+//!   and its parts, the [`replay`] frames and [`maps::MapOverview`].
 //! * `user-messages`: [`proto`] types for user messages, temp entities and CS
 //!   game events, to decode what [`Visitor::on_net_message`] delivers.
 //!
@@ -62,8 +69,11 @@ pub mod container;
 pub mod entities;
 pub mod error;
 pub mod events;
+pub mod maps;
 pub mod model;
 pub mod parser;
+pub mod replay;
+pub mod scouting;
 pub mod sendtables;
 pub mod stats;
 pub mod stringtables;
@@ -87,7 +97,8 @@ pub use parser::{Context, DemoParser, ParseOptions, Visitor};
 pub use stats::{MatchStats, StatsCollector};
 
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 /// Reads one byte per page so the OS maps the whole file, stopping early when
 /// the parse ends first (early stop, `end_tick`).
@@ -176,4 +187,43 @@ impl Demo {
     pub fn frames(&self) -> container::FrameIter<'_> {
         container::FrameIter::new(self.bytes())
     }
+}
+
+/// Runs [`Demo::match_stats`] on several demos in parallel, one demo per CPU
+/// core at a time. Results come back in the order of `paths`.
+///
+/// ```no_run
+/// let results = cs2_demo::match_stats_many(&["a.dem", "b.dem", "c.dem"]);
+/// for stats in results {
+///     let stats = stats?;
+///     println!("{}: {} rounds", stats.map, stats.rounds.len());
+/// }
+/// # Ok::<(), cs2_demo::Error>(())
+/// ```
+pub fn match_stats_many<P: AsRef<Path> + Sync>(paths: &[P]) -> Vec<Result<MatchStats>> {
+    let workers = std::thread::available_parallelism()
+        .map_or(1, |n| n.get())
+        .min(paths.len());
+    let next = AtomicUsize::new(0);
+    let results: Vec<Mutex<Option<Result<MatchStats>>>> = paths.iter().map(|_| Mutex::new(None)).collect();
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            s.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(path) = paths.get(i) else { break };
+                    let stats = Demo::open(path).and_then(|d| d.match_stats());
+                    *results[i].lock().unwrap_or_else(|e| e.into_inner()) = Some(stats);
+                }
+            });
+        }
+    });
+    results
+        .into_iter()
+        .map(|r| {
+            r.into_inner()
+                .unwrap_or_else(|e| e.into_inner())
+                .expect("every demo was parsed")
+        })
+        .collect()
 }

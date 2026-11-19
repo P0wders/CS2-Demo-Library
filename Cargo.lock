@@ -213,6 +213,7 @@ dependencies = [
  "protox",
  "rustc-hash",
  "serde",
+ "serde_json",
  "snap",
  "thiserror",
 ]

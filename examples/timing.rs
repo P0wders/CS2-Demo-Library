@@ -29,10 +29,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         println!("{label:12} {best:.2} s  ({:.0} MB/s)", mb / best);
     }
-    let t = Instant::now();
-    demo.match_stats()?;
-    let s = t.elapsed().as_secs_f64();
-    println!("{:12} {s:.2} s  ({:.0} MB/s)", "match_stats", mb / s);
+    let mut best = f64::MAX;
+    for _ in 0..3 {
+        let t = Instant::now();
+        demo.match_stats()?;
+        best = best.min(t.elapsed().as_secs_f64());
+    }
+    println!("{:12} {best:.2} s  ({:.0} MB/s)", "match_stats", mb / best);
     if std::env::args().any(|a| a == "--count") {
         let mut c = CountFields::default();
         demo.parse(ParseOptions::default(), &mut c)?;

@@ -1,10 +1,17 @@
 # cs2_demo
 
-A fast Counter-Strike 2 demo (`.dem`) parser for Rust, written from scratch.
+A fast Counter-Strike 2 demo (`.dem`) parser and match analyzer for Rust,
+written from scratch.
 
 It gives you the game events, the full game state at every tick (positions,
-health, money, weapons, …) and ready-made match statistics: K/D/A, ADR, KAST,
-HLTV rating, opening duels, trades, multi-kills and utility.
+health, money, weapons, …) and the numbers a team analyst works with:
+
+- **Scoreboard:** K/D/A, ADR, KAST, HLTV Rating 1.0, opening duels, trades and multi-kills, split by T and CT side.
+- **Rounds and economy:** every player's round, each team's buy (pistol, eco, semi-eco, force, full buy), bomb sites, clutches and where everyone stood.
+- **Utility:** every grenade, with its lineup, flight, and effect (players blinded, damage, smoke and fire duration).
+- **Aim:** accuracy, head hits, first-shot accuracy, counter-strafing, crosshair placement and time to kill.
+- **Scouting across many demos:** map records, side and pistol win rates, buys, site preferences, setups and lineups.
+- **2D replay and radar positions:** players, grenades, smokes, fires and the bomb over time, placed on the map's radar image.
 
 ```rust
 let stats = cs2_demo::Demo::open("match.dem")?.match_stats()?;
@@ -14,12 +21,14 @@ for p in &stats.players {
 ```
 
 - **Fast.** On a 342 MB, 48-minute pro demo: game events in 0.13 s, every
-  entity update in under 2 s, with about 12 MB of memory.
+  entity update in under 2 s, all the statistics above in 2.1 s, with about
+  12 MB of memory.
 - **Checked.** Every entity update is verified against the bit length the
   server recorded, and kills, deaths and assists match the game's own
-  scoreboard. Tested on 32 demos from six game builds: tournaments, FACEIT and
-  Valve matchmaking.
-- **Simple.** One call for a scoreboard, or implement a `Visitor` to see
+  scoreboard: tested on 32 demos from six game builds (tournaments, FACEIT and
+  Valve matchmaking). Per round, kills, damage and equipment values match the
+  server's own per-round counters (see [Compatibility](#compatibility)).
+- **Simple.** One call for everything, or implement a `Visitor` to see
   everything as it happens.
 - **Pure Rust.** No `protoc` or other tools to install.
 
@@ -28,6 +37,8 @@ for p in &stats.players {
 - [Installation](#installation)
 - [Quick start](#quick-start)
 - [What the stats contain](#what-the-stats-contain)
+- [Scouting several demos](#scouting-several-demos)
+- [2D replay and radar positions](#2d-replay-and-radar-positions)
 - [Examples](#examples)
 - [Performance](#performance)
 - [Compatibility](#compatibility)
@@ -60,7 +71,7 @@ Optional features:
 
 | Feature | Adds |
 |---|---|
-| `serde` | `serde::Serialize` for the stats types (see [Export to JSON](#export-to-json)) |
+| `serde` | `serde::Serialize` and `Deserialize` for the stats types (see [Export to JSON](#export-to-json)) |
 | `user-messages` | protobuf types for user messages, temp entities and CS game events, to decode what `on_net_message` delivers. Off by default because it triples the generated code and doubles the crate's compile time |
 
 ## Quick start
@@ -81,38 +92,43 @@ fn main() -> Result<(), cs2_demo::Error> {
     }
     for p in &stats.players {
         println!(
-            "{:16} {:>2}-{:>2}-{:>2}  ADR {:5.1}  HS {:3.0}%  KAST {:3.0}%  rating {:.2}",
+            "{:16} {:>2}-{:>2}-{:>2}  ADR {:5.1}  KAST {:3.0}%  rating {:.2}  T {:.2} / CT {:.2}",
             p.name, p.kills, p.deaths, p.assists,
-            p.adr(), p.hs_ratio() * 100.0, p.kast() * 100.0, p.rating()
+            p.adr(), p.kast() * 100.0, p.rating(), p.t.rating(), p.ct.rating()
         );
     }
     for r in &stats.rounds {
-        println!("round {:2}: {:?} won ({:?})", r.number, r.winner_name, r.reason);
+        let buy = |side| r.economy(side).map(|e| e.buy.label()).unwrap_or("?");
+        println!(
+            "round {:2}: {:?} won ({:?}); T {} vs CT {}",
+            r.number, r.winner_name, r.reason,
+            buy(cs2_demo::Team::Terrorist), buy(cs2_demo::Team::CounterTerrorist)
+        );
     }
     Ok(())
 }
 ```
 
 This is that data for Nemiga vs Vitality on Cache, as rendered by the `report`
-example ([full report with rounds, highlights and kill feed](docs/report-nemiga-vs-vitality.md)):
+example ([full report with sides, utility, aim, economy, rounds, clutches and kill feed](docs/report-nemiga-vs-vitality.md)):
 
 **Nemiga 13 – 8 Team Vitality** (de_cache)
 
 | Nemiga | K | D | A | +/− | ADR | HS % | KAST | Rating |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|
-| robo | 24 | 11 | 4 | +13 | 95.2 | 46 % | 81 % | 1.73 |
-| Xant3r | 20 | 15 | 4 | +5 | 87.3 | 40 % | 67 % | 1.31 |
-| khaN | 13 | 8 | 3 | +5 | 53.1 | 46 % | 81 % | 1.11 |
-| SYPH0 | 13 | 10 | 6 | +3 | 80.5 | 69 % | 86 % | 1.06 |
-| KaiR0N- | 17 | 15 | 7 | +2 | 105.1 | 65 % | 86 % | 1.05 |
+| robo | 24 | 11 | 4 | +13 | 96.1 | 46 % | 81 % | 1.73 |
+| Xant3r | 20 | 15 | 4 | +5 | 88.1 | 40 % | 67 % | 1.31 |
+| khaN | 13 | 8 | 3 | +5 | 53.3 | 46 % | 81 % | 1.11 |
+| SYPH0 | 13 | 10 | 6 | +3 | 81.0 | 69 % | 86 % | 1.06 |
+| KaiR0N- | 17 | 15 | 7 | +2 | 105.5 | 65 % | 86 % | 1.05 |
 
 | Team Vitality | K | D | A | +/− | ADR | HS % | KAST | Rating |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|
-| ZywOo | 18 | 15 | 5 | +3 | 93.0 | 33 % | 86 % | 1.23 |
-| jL | 13 | 19 | 5 | -6 | 66.8 | 46 % | 67 % | 0.76 |
-| ropz | 12 | 18 | 3 | -6 | 65.7 | 42 % | 62 % | 0.73 |
-| flameZ | 12 | 18 | 5 | -6 | 49.6 | 33 % | 71 % | 0.68 |
-| mezii | 3 | 17 | 8 | -14 | 49.6 | 67 % | 52 % | 0.30 |
+| ZywOo | 18 | 15 | 5 | +3 | 93.2 | 33 % | 86 % | 1.23 |
+| jL | 13 | 19 | 5 | -6 | 67.1 | 46 % | 67 % | 0.76 |
+| ropz | 12 | 18 | 3 | -6 | 66.1 | 42 % | 62 % | 0.73 |
+| flameZ | 12 | 18 | 5 | -6 | 50.4 | 33 % | 71 % | 0.68 |
+| mezii | 3 | 17 | 8 | -14 | 50.6 | 67 % | 52 % | 0.30 |
 
 ### Your own analysis: implement `Visitor`
 
@@ -163,6 +179,15 @@ fn main() -> Result<(), cs2_demo::Error> {
 
 `parse` also returns the `Context` as it was at the end of the demo.
 
+To run your visitor and the built-in statistics in one parse, pass a tuple:
+every callback goes to both.
+
+```rust
+let mut both = (cs2_demo::StatsCollector::new(), KillPositions::default());
+let ctx = demo.parse(ParseOptions::default(), &mut both)?;
+let stats = both.0.into_stats(&ctx);
+```
+
 ### Reading game state
 
 - **Players:** `ctx.players()`, `ctx.active_players()` (on T or CT),
@@ -170,7 +195,7 @@ fn main() -> Result<(), cs2_demo::Error> {
   - identity: `name()`, `steam_id()`, `team()`, `clan()`, `is_bot()`
   - status: `is_alive()`, `health()`, `armor()`, `has_helmet()`, `has_defuser()`,
     `flash_duration()`, `is_scoped()`, `is_defusing()`, `is_ducking()`
-  - economy: `money()`, `equipment_value()`, `cash_spent_this_round()`
+  - economy: `money()`, `start_money()`, `equipment_value()`, `cash_spent_this_round()`
   - position: `position()`, `eye_angles()`, `place()` (callout name)
   - equipment: `active_weapon()`, `weapons()` (name, clip, reserve ammo)
   - scoreboard: `scoreboard()`, `score()`, `mvps()`, `ping()`
@@ -203,23 +228,22 @@ The raw messages are protobuf bytes. Decode them with the types in
 
 ### Many demos at once
 
-Parsing one demo uses one core. Parse several demos in parallel to use them all:
+Parsing one demo uses one core. `match_stats_many` parses several in
+parallel, one per core, and returns the results in order:
 
 ```rust
 let paths = ["a.dem", "b.dem", "c.dem"];
-let all_stats = std::thread::scope(|s| {
-    let jobs: Vec<_> = paths
-        .iter()
-        .map(|path| s.spawn(move || cs2_demo::Demo::open(path)?.match_stats()))
-        .collect();
-    jobs.into_iter().map(|j| j.join().unwrap()).collect::<Vec<_>>()
-});
+for stats in cs2_demo::match_stats_many(&paths) {
+    let stats = stats?;
+    println!("{}: {} rounds", stats.map, stats.rounds.len());
+}
 ```
 
 ### Export to JSON
 
 With the `serde` feature, `MatchStats` and everything in it implements
-`serde::Serialize`:
+`serde::Serialize` and `Deserialize`, so analysed matches can be saved and
+loaded back without parsing the demos again:
 
 ```toml
 cs2_demo = { git = "https://github.com/P0wders/CS2-Demo-Library", features = ["serde"] }
@@ -229,6 +253,7 @@ serde_json = "1"
 ```rust
 let stats = cs2_demo::Demo::open("match.dem")?.match_stats()?;
 std::fs::write("stats.json", serde_json::to_string_pretty(&stats)?)?;
+let back: cs2_demo::MatchStats = serde_json::from_str(&std::fs::read_to_string("stats.json")?)?;
 ```
 
 ## What the stats contain
@@ -238,27 +263,117 @@ std::fs::write("stats.json", serde_json::to_string_pretty(&stats)?)?;
 | Field | Contents |
 |---|---|
 | `teams` | name, final score, score per half and in overtime |
-| `players` | per player: kills, deaths, assists, flash assists; headshot, wallbang, no-scope and through-smoke kills; team kills, suicides; damage and utility damage; opening kills and deaths; trade kills and traded deaths; KAST rounds; rounds with 2–5 kills; enemies and teammates flashed and blind time caused; grenades thrown by type; bomb plants and defuses; MVPs and score. Methods: `adr()`, `kpr()`, `kd()`, `hs_ratio()`, `kast()`, `rating()` |
-| `rounds` | number, winner (team name and side), how it ended, bomb planted / defused / exploded, kills, score after the round |
-| `kills` | the kill feed: tick, round, attacker, victim, assister, weapon, and headshot, wallbang, no-scope, through smoke, attacker blind, flash assist, team kill and traded flags |
+| `players` | per player: kills, deaths, assists, flash assists; headshot, wallbang, no-scope and through-smoke kills; team kills, suicides; damage and utility damage; opening kills and deaths; trade kills and traded deaths; KAST rounds; rounds with 2–5 kills; clutches entered and won; enemies and teammates flashed, blind time caused, flashes that led to a kill; grenades thrown by type, utility value left unused at death; bomb plants and defuses; MVPs and score. `t` and `ct` hold the same per side. `aim` holds shots, hits, head hits, first-shot accuracy, shots at accurate speed, crosshair offsets, kill times and per-weapon numbers. Methods: `adr()`, `kpr()`, `dpr()`, `apr()`, `kd()`, `hs_ratio()`, `kast()`, `rating()`, `impact()`, `rating2_approx()` (also on `t` and `ct`) |
+| `rounds` | number, start, end of freeze time and end ticks; team names on each side; winner and how the round ended; bomb planted, site, time and planter, defused or exploded; kills; score after the round; each team's economy (start money, equipment value, money spent, loss streak, buy type); where every player stood 20 s into the round; every player's round (side, kills, assists, death, damage, trade, KAST, opening duel, money, equipment, spending) |
+| `kills` | the kill feed: tick, round, time in the round, attacker, victim and assister, their sides, positions and callouts, distance, weapon, the victim's weapon, and headshot, wallbang, no-scope, through smoke, attacker blind, flash assist, team kill and traded flags |
+| `clutches` | round, player, side, enemies left (1v1 to 1v5), kills during the clutch, won, survived |
+| `grenades` | every grenade: type, round, thrower and side, throw tick and time, where the thrower stood, view angles, crouch, jump throw and speed, release point and velocity, trajectory, detonation tick and point, end of smoke or fire, players blinded and for how long, whether the flash led to a kill, damage to enemies and teammates. `MatchStats::lineups()` groups repeated throws |
 
 Definitions:
 
 - Kills exclude team kills and suicides; deaths include them.
-- ADR counts health damage to enemies, capped at what the victim had left.
+- ADR counts health damage to enemies. A victim's health is followed through
+  every hit (the bomb, falls and fire included), so damage is capped at what
+  they had left. Fire deals fractions of a point per tick: the real health
+  lost is counted, not the rounded-down `dmg_health` of the event.
 - A death is traded when a teammate of the victim kills the killer within
   5 seconds.
 - KAST is the share of rounds with a kill, assist, survival or trade.
-- Rating is HLTV Rating 1.0, the published formula. Later HLTV ratings are not
-  public.
+- Rating is HLTV Rating 1.0, the published formula. `impact()` and
+  `rating2_approx()` are community approximations of HLTV's Impact and
+  Rating 2.0, whose formulas are not public.
+- Economy is read when freeze time ends: each player's money at the start of
+  the round and the value of what they carry. A team's buy type comes from
+  its average equipment value per player: eco under \$1,000, semi-eco under
+  \$2,000, force buy under \$4,000, full buy above (`BuyThresholds`, which can
+  be changed). Pistol rounds are rounds where every player started with
+  \$1,000 or less: the first round of each half.
+- A clutch starts when a player is the last one alive on their side and at
+  least one enemy is alive. In a 1v1 both players are clutching.
+- The bomb site comes from the planted bomb (`m_nBombSite`), else from the
+  planter's callout.
 - Enemies flashed come from `player_blind` events. Some tournament servers
   don't record those; for their demos a blind is a victim's flash duration
   rising when a flashbang detonates, credited to the detonation nearest to the
   victim.
+- A grenade is its projectile: thrower, release point and velocity come from
+  the projectile entity, the thrower's stance and aim from their pawn, the
+  detonation from the game event naming that projectile. A fire is linked to
+  the molotov its thrower just threw. A grenade marked `dropped` fell from a
+  player who died holding it primed; it is not counted as a throw. Throws are
+  counted from the grenades, since Valve matchmaking demos have no
+  `grenade_thrown` events.
+- Valve matchmaking doesn't name the teams (its side names "TERRORIST" and
+  "CT" change hands at half-time). Such a team is named after one of its
+  players ("Team ZyWho") and followed across side switches by its players.
+- Aim, from every shot fired with a gun:
+  - A shot **hits** when the shooter damages an enemy in the same tick, or
+    within 8 ticks for the later bullets of a burst (Glock-18, FAMAS), which
+    share one `weapon_fire` event. The Zeus counts as a gun.
+  - An **engagement** opens with the first shot at an enemy after 2 s without
+    shooting at them. The enemy is the one hit, or else the one closest to the
+    crosshair within 10°.
+  - **First-shot accuracy** is the share of engagements whose first shot hit.
+  - **Shots at accurate speed** are rifle, sniper and pistol shots fired below
+    34 % of the weapon's maximum speed, i.e. after stopping or counter-strafing.
+  - **Crosshair placement** is the median angle between the crosshair and the
+    enemy's head 0.2 s before an engagement's first shot.
+  - **Time to kill** is the median time from that shot to the kill.
+
+  These are approximations: demos are recorded at 64 tick, and the head is a
+  point at eye height. The game's own "spotted" flags are not used: in demos
+  they are updated only about twice a second.
 - Warmup doesn't count, and neither does anything after the final scoreboard
   appears (players leaving then are recorded as suicides by the game).
 - Demos that start mid-match, or matches split over several files, number
   their rounds from the game's own round counter.
+
+## Scouting several demos
+
+`Scouting` collects `MatchStats` and answers questions about a team or a
+player across all of them:
+
+```rust
+use cs2_demo::scouting::Scouting;
+
+let mut scouting = Scouting::new();
+for stats in cs2_demo::match_stats_many(&paths) {
+    scouting.add(stats?);
+}
+let team = scouting.team("Vitality").expect("in these demos");
+for map in &team.maps {
+    println!(
+        "{}: won {} of {}; T rounds {:.0} %, CT rounds {:.0} %, pistols {}/{}, plants A {} / B {}",
+        map.map, map.wins, map.matches, map.t.rate() * 100.0, map.ct.rate() * 100.0,
+        map.pistols.won, map.pistols.played, map.plants_a, map.plants_b
+    );
+}
+```
+
+A `TeamProfile` has, per map: matches and wins, T and CT rounds, pistol
+rounds, rounds won with each buy and against each buy, bomb plants per site and
+average plant time, the most frequent CT setups and T positions 20 s into the
+round, opening duels per side with the callouts where they were won and lost,
+grenades per round and the team's repeated lineups. It also lists the team's
+players. A `PlayerProfile` holds a player's summed stats (rates recomputed),
+per-map stats and usual callouts on each side.
+
+Teams are matched by name, ignoring case, punctuation and a leading "Team"
+("Team Vitality" = "Vitality"). `Scouting::alias` merges other names.
+
+## 2D replay and radar positions
+
+`replay::PositionRecorder` is a visitor that samples
+players, grenades, smokes, fires and the bomb every few ticks. Run it next to
+the statistics, `(StatsCollector::new(), PositionRecorder::every(16))`, for
+your own replays.
+
+Positions are placed on radar images with `maps::MapOverview`. It has
+calibration for Ancient, Anubis, Cache, Dust2, Inferno, Mirage, Nuke,
+Overpass, Train and Vertigo. The tests check those in the test demos (Anubis,
+Cache, Dust2, Inferno, Mirage and Nuke); the others are untested.
+`MapOverview::from_kv` reads the game's own overview files
+(`resource/overviews/<map>.txt`), to fix a value or for any other map.
 
 ## Examples
 
@@ -266,8 +381,10 @@ Run any example with `cargo run --release --example <name> -- match.dem`.
 
 | Example | What it does |
 |---|---|
+| `report` | Markdown report: result, scoreboard, sides, utility and aim, rounds with buys, economy, clutches, highlights, kill feed, checks and parse times. Takes several demos: `-- a.dem b.dem > report.md` |
+| `scout` | Markdown scouting report on one team from many demos: `-- "Vitality" demos/ > scouting.md` |
+| `lineups` | every grenade as CSV (thrower, spot, angles, landing, effect), or the repeated lineups with `--lineups` |
 | `scoreboard` | HLTV-style scoreboard and round history in the terminal |
-| `report` | Markdown report: result, scoreboard, rounds, highlights, kill feed, checks and parse times. Takes several demos: `-- a.dem b.dem > report.md` |
 | `dump_events` | every game event with player names, optionally filtered: `-- match.dem player_death,bomb_planted` |
 | `positions` | every living player's position as CSV, for heatmaps or 2D replays: `-- match.dem 64 > positions.csv` |
 | `inspect` | structural summary: entity counts, string tables, event counts and parse speed |
@@ -278,8 +395,8 @@ Run any example with `cargo run --release --example <name> -- match.dem`.
 ## Performance
 
 Measured on Nemiga vs Vitality, Cache (342 MB, 48 minutes, 184,457 ticks) with
-the `timing` and `report` examples: AMD Ryzen 7 5800X, Windows 11, one thread,
-file already in the OS cache.
+the `timing` example: AMD Ryzen 7 5800X, Windows 11, one thread, file already
+in the OS cache, best of several runs.
 
 | Step | Time | Speed |
 |---|--:|--:|
@@ -287,7 +404,7 @@ file already in the OS cache.
 | Ready for the first tick: schema, string tables, baselines | 6 ms | |
 | Game events only | 0.13 s | 2.6 GB/s |
 | Full parse: 4.76 million entity updates | 1.95 s | 175 MB/s |
-| `match_stats()`: full parse plus statistics | 2.01 s | 171 MB/s |
+| `match_stats()`: full parse plus every statistic above | 2.12 s | 162 MB/s |
 
 Memory: about 12 MB besides the memory-mapped file, which stays in the OS page
 cache rather than being copied.
@@ -309,6 +426,10 @@ What makes it fast:
   integers come out of a single 64-bit read.
 - Entity properties live in a compact trie keyed by field path, and values fit
   in 24 bytes, with rare large values boxed.
+- The statistics read entity state through property paths resolved once per
+  demo. Player updates change about 16 properties each, mostly animation
+  state: two array lookups per changed property find the few that matter
+  (position, view, crouch, flash).
 
 ## Compatibility
 
@@ -319,6 +440,21 @@ scoreboard:
 | Game builds | Network patches | Recorded by |
 |---|---|---|
 | 10680, 10772, 10847, 10896, 10924, 10955 | 14134 to 14197 | tournament servers (BLAST, ESL and others), FACEIT, Valve matchmaking |
+
+The per-round statistics, economy, grenades, aim, radar calibration and
+scouting were added later. They were checked on 5 tournament demos of build
+10924 (ESL Pro League and PGL Masters; Anubis, Cache, Dust2, Mirage and Nuke)
+and 4 Valve matchmaking demos of builds 10896 and 10955 (Dust2, Inferno and
+Mirage, including a match with overtime):
+
+- per-round kills, deaths, assists, damage and equipment values equal the
+  server's own per-round counters;
+- every grenade is linked to its detonation, and matches a throw event where
+  the demo has them;
+- grenade damage adds up to utility damage.
+
+Run the suite on your own demos (see [Development](#development)) before
+relying on them for other builds or for FACEIT demos.
 
 CS2 updates sometimes change how data is encoded. The parser reads the encoding
 from the schema stored in each demo, so most updates need no change. It also
@@ -345,7 +481,9 @@ Not supported or not tested:
          └─ game events: descriptor list, then events            events
               └─ Visitor callbacks with the current Context
                    ├─ typed views: Player, TeamInfo, GameRules    model
-                   └─ StatsCollector -> MatchStats                stats
+                   ├─ StatsCollector -> MatchStats                stats
+                   ├─ PositionRecorder -> replay frames           replay
+                   └─ many MatchStats -> team and player profiles scouting
 ```
 
 | Module | Contents |
@@ -356,9 +494,12 @@ Not supported or not tested:
 | `sendtables` | the class schema: property types, encoders and decoders |
 | `entities` | field-path decoding, property values, entity state |
 | `events` | game event descriptors and decoded events |
-| `parser` | `DemoParser`, `ParseOptions`, `Visitor`, `Context` |
+| `parser` | `DemoParser`, `ParseOptions`, `Visitor` (and tuples of visitors), `Context` |
 | `model` | `Player`, `TeamInfo`, `GameRules`, `Weapon`, `Team` |
-| `stats` | `StatsCollector` and `MatchStats` |
+| `stats` | `StatsCollector` and `MatchStats`: scoreboard, rounds and economy, clutches, grenades and lineups, aim |
+| `maps` | radar calibration: world positions to radar pixels |
+| `replay` | `PositionRecorder`: positions over time for 2D replays |
+| `scouting` | `Scouting`: team and player profiles over many matches |
 | `proto` | protobuf types generated from Valve's `.proto` files in `proto/` |
 
 ## Development
@@ -366,6 +507,7 @@ Not supported or not tested:
 ```sh
 cargo test                                # unit tests (integration tests skip without demos)
 CS2_DEMO_DIR=path/to/demos cargo test     # run the integration suite on your demos
+CS2_DEMO_DIR=path/to/demos cargo test --features serde   # also checks the JSON round trip
 CS2_DEMO_BENCH=path/to/demo.dem cargo bench
 cargo clippy --all-targets --features serde,user-messages
 ```
@@ -374,7 +516,7 @@ In PowerShell, set the variable first: `$env:CS2_DEMO_DIR = "D:\demos"`.
 
 Demos are not committed (see `.gitignore`). Put them in `Demo/`, subfolders
 included, or point `CS2_DEMO_DIR` at a folder. The integration suite parses
-every demo it finds, in parallel, and checks for each one that:
+every demo it finds, in parallel. It checks for each one that:
 
 - every entity update decodes to exactly the bit length the server recorded;
 - there are 10 players whose names and SteamIDs agree with the server's player
@@ -383,8 +525,25 @@ every demo it finds, in parallel, and checks for each one that:
   final score;
 - for demos that contain the whole match, every player's kills, deaths and
   assists equal the game's own scoreboard;
+- each player's round lines and T/CT splits add up to their totals. Per round,
+  kills, deaths, assists and equipment value equal the server's per-round
+  counters, and damage is within a point of them;
+- every round has both teams' economies; pistol rounds are round 1 and the
+  first round after the side switch; every planted round has a bomb site;
+  clutches are consistent with the round results;
+- every grenade detonated and, where the demo has `grenade_thrown` events,
+  matches one; grenades counted as dropped belong to players who died then;
+  grenade damage equals utility damage; grenade blinds equal enemies
+  flashed; smokes and fires last as long as they can;
+- kills per weapon match the kill feed, and the aim numbers are in the ranges
+  of professional players;
+- kill, setup and grenade positions fall on the map's radar image and cover
+  most of it;
 - flash statistics are filled in, and where a demo has `player_blind` events,
   they agree with the pawn flash state used as a fallback.
+
+A second test runs `match_stats_many` on all the demos and checks it against
+`match_stats`, and that the scouting profiles add up.
 
 After a CS2 update, run the suite on a new demo. If decoding breaks,
 `entity_diagnostics()` names the first entity that went wrong, `dump_schema`

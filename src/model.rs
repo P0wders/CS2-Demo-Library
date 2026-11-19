@@ -108,12 +108,18 @@ impl RoundEndReason {
 const CELL_WIDTH: f32 = 512.0;
 const MAX_COORD: f32 = 16384.0;
 
+/// World coordinate from a networked cell index and the offset inside the cell.
+#[inline]
+pub(crate) fn cell_coord(cell: u32, offset: f32) -> f32 {
+    cell as f32 * CELL_WIDTH - MAX_COORD + offset
+}
+
 /// World position of an entity with a `CBodyComponent`.
 pub fn entity_position(e: &Entity) -> Option<[f32; 3]> {
     let axis = |cell: &str, off: &str| -> Option<f32> {
-        let c = e.get::<u32>(cell)? as f32;
+        let c = e.get::<u32>(cell)?;
         let o = e.get::<f32>(off).unwrap_or(0.0);
-        Some(c * CELL_WIDTH - MAX_COORD + o)
+        Some(cell_coord(c, o))
     };
     Some([
         axis("CBodyComponent.m_cellX", "CBodyComponent.m_vecX")?,
@@ -199,6 +205,13 @@ impl<'a> Player<'a> {
     pub fn money(&self) -> i32 {
         self.controller
             .get::<i32>("m_pInGameMoneyServices.m_iAccount")
+            .unwrap_or(0)
+    }
+
+    /// Money at the start of the current round.
+    pub fn start_money(&self) -> i32 {
+        self.controller
+            .get::<i32>("m_pInGameMoneyServices.m_iStartAccount")
             .unwrap_or(0)
     }
 
@@ -452,6 +465,14 @@ impl<'a> TeamInfo<'a> {
 
     pub fn score_overtime(&self) -> i32 {
         self.entity.get::<i32>("m_scoreOvertime").unwrap_or(0)
+    }
+
+    /// The team's name, if the server set one (tournaments and FACEIT do,
+    /// Valve matchmaking doesn't).
+    pub fn clan_name(&self) -> Option<String> {
+        self.entity
+            .get::<String>("m_szClanTeamname")
+            .filter(|s| !s.is_empty())
     }
 
     /// Clan name ("Vitality") if set, otherwise the side name ("TERRORIST").
