@@ -462,6 +462,21 @@ pub struct MatchStats {
 }
 
 impl MatchStats {
+    /// Borrows the recorded kills for a round, in match order.
+    pub fn round_kills(&self, number: u32) -> impl Iterator<Item = &Kill> {
+        self.kills.iter().filter(move |k| k.round == number)
+    }
+
+    /// Borrows the grenades thrown in a round, in throw order.
+    pub fn round_grenades(&self, number: u32) -> impl Iterator<Item = &Grenade> {
+        self.grenades.iter().filter(move |g| g.round == number)
+    }
+
+    /// Borrows clutch attempts for a round, including unsuccessful attempts.
+    pub fn round_clutches(&self, number: u32) -> impl Iterator<Item = &Clutch> {
+        self.clutches.iter().filter(move |c| c.round == number)
+    }
+
     pub fn player(&self, steam_id: u64) -> Option<&PlayerStats> {
         self.players.iter().find(|p| p.steam_id == steam_id)
     }

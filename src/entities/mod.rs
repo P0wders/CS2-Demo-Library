@@ -270,9 +270,9 @@ fn trace_enabled() -> bool {
 #[derive(Default)]
 pub(crate) struct EntityDecoder {
     paths: Vec<FieldPath>,
-    values: Vec<(FieldPath, Value)>,
+    values: Vec<Value>,
     /// Decoded instance baselines per class id.
-    baselines: FxHashMap<u32, Arc<Vec<(FieldPath, Value)>>>,
+    baselines: FxHashMap<u32, Vec<(FieldPath, Value)>>,
     pub diagnostics: EntityDiagnostics,
     /// Scratch buffer for `serialized_entities` sizes.
     pub sizes: Vec<u32>,
@@ -297,21 +297,19 @@ fn read_fields(
     serializer: &Serializer,
     paths: &mut Vec<FieldPath>,
     cp: &CoordParams,
-    out: &mut Vec<(FieldPath, Value)>,
+    out: &mut Vec<Value>,
     existing: Option<&PropNode>,
 ) -> Result<()> {
     read_field_paths(r, paths)?;
     let trace = trace_enabled();
-    let batch_start = out.len();
+    out.clear();
     for fp in paths.iter() {
         let decoder = {
-            let decoded = &out[batch_start..];
             let subtype = |p: &[i32]| -> Option<i32> {
-                decoded
+                paths[..out.len()]
                     .iter()
-                    .rev()
-                    .find(|(q, _)| q.as_slice() == p)
-                    .map(|(_, v)| v)
+                    .rposition(|q| q.as_slice() == p)
+                    .map(|i| &out[i])
                     .or_else(|| existing?.get(p))
                     .and_then(Value::as_i32)
             };
@@ -335,7 +333,7 @@ fn read_fields(
                 r.position() - start
             );
         }
-        out.push((*fp, v));
+        out.push(v);
     }
     r.check_overflow("entity fields")
 }
@@ -378,11 +376,10 @@ fn decode_entity_fields(
     serializer: &Serializer,
     paths: &mut Vec<FieldPath>,
     cp: &CoordParams,
-    out: &mut Vec<(FieldPath, Value)>,
+    out: &mut Vec<Value>,
     size: Option<usize>,
     existing: Option<&PropNode>,
 ) -> Result<bool> {
-    out.clear();
     let start = r.position();
     let res = read_fields(r, serializer, paths, cp, out, existing);
     let Some(size) = size else {
@@ -523,7 +520,7 @@ impl<'a> PacketEntitiesCursor<'a> {
                 Some(props),
             )?;
             if ok {
-                for (path, v) in values.drain(..) {
+                for (path, v) in dec.paths.iter().zip(values.drain(..)) {
                     props.set(path.as_slice(), v);
                 }
                 dec.values = values;
@@ -557,41 +554,36 @@ impl<'a> PacketEntitiesCursor<'a> {
             .ok_or_else(|| Error::malformed(format!("unknown class id {class_id} for entity {idx}")))?
             .clone();
 
-        let baseline = match dec.baselines.get(&class_id) {
-            Some(b) => b.clone(),
-            None => {
-                let mut decoded = Vec::new();
-                let key = class_id.to_string();
-                let raw = env
-                    .baselines
-                    .and_then(|t| t.find(&key))
-                    .and_then(|(_, e)| e.value.clone());
-                if let Some(raw) = raw {
-                    let mut br = BitReader::new(&raw);
-                    let res = read_fields(
-                        &mut br,
-                        &class.serializer,
-                        &mut dec.paths,
-                        &env.coord_params,
-                        &mut decoded,
-                        None,
-                    );
-                    // A correct decode ends inside the final (padding) byte.
-                    let res = res.and_then(|()| match br.remaining_bits() {
-                        0..8 => Ok(()),
-                        n => Err(Error::malformed(format!("{n} trailing bits"))),
-                    });
-                    if let Err(e) = res {
-                        dec.diagnostics.baseline_errors += 1;
-                        dec.diagnostics
-                            .record(|| format!("baseline of {} failed: {e}", class.name));
-                    }
+        let baseline = dec.baselines.entry(class_id).or_insert_with(|| {
+            let mut decoded = Vec::new();
+            let key = class_id.to_string();
+            let raw = env
+                .baselines
+                .and_then(|t| t.find(&key))
+                .and_then(|(_, e)| e.value.as_deref());
+            if let Some(raw) = raw {
+                let mut br = BitReader::new(raw);
+                let res = read_fields(
+                    &mut br,
+                    &class.serializer,
+                    &mut dec.paths,
+                    &env.coord_params,
+                    &mut decoded,
+                    None,
+                );
+                // A correct decode ends inside the final (padding) byte.
+                let res = res.and_then(|()| match br.remaining_bits() {
+                    0..8 => Ok(()),
+                    n => Err(Error::malformed(format!("{n} trailing bits"))),
+                });
+                if let Err(e) = res {
+                    dec.diagnostics.baseline_errors += 1;
+                    dec.diagnostics
+                        .record(|| format!("baseline of {} failed: {e}", class.name));
                 }
-                let b = Arc::new(decoded);
-                dec.baselines.insert(class_id, b.clone());
-                b
             }
-        };
+            dec.paths.iter().copied().zip(decoded).collect()
+        });
 
         if trace_enabled() {
             eprintln!(
@@ -615,7 +607,7 @@ impl<'a> PacketEntitiesCursor<'a> {
             Some(&props),
         )?;
         if ok {
-            for (path, v) in values.drain(..) {
+            for (path, v) in dec.paths.iter().zip(values.drain(..)) {
                 props.set(path.as_slice(), v);
             }
         } else {

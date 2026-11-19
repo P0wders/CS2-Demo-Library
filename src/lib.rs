@@ -125,6 +125,11 @@ pub struct Demo {
 }
 
 impl Demo {
+    /// Reads match metadata and releases the file mapping before returning.
+    pub fn read_header(path: impl AsRef<Path>) -> Result<DemoHeader> {
+        Ok(Self::open(path)?.header)
+    }
+
     pub fn open(path: impl AsRef<Path>) -> Result<Demo> {
         let file = std::fs::File::open(path)?;
         // SAFETY: the map is read-only; modifying the demo file while it is being
@@ -158,7 +163,7 @@ impl Demo {
 
     /// Parses the demo, driving `visitor`. Returns the final game state.
     pub fn parse<V: Visitor + ?Sized>(&self, opts: ParseOptions, visitor: &mut V) -> Result<Context> {
-        let parser = DemoParser::new(self.bytes(), opts)?;
+        let parser = DemoParser::with_header(self.bytes(), opts, self.header.clone());
         match &self.bytes {
             Bytes::Owned(_) => parser.run(visitor),
             // The first touch of each page of a fresh mapping costs a page
@@ -181,6 +186,41 @@ impl Demo {
         let mut collector = StatsCollector::new();
         let ctx = self.parse(ParseOptions::default(), &mut collector)?;
         Ok(collector.into_stats(&ctx))
+    }
+
+    /// Parses on the calling thread, without touching file pages ahead of the parser.
+    /// Useful for short queries or applications that manage their own worker pool.
+    pub fn parse_single_threaded<V: Visitor + ?Sized>(
+        &self,
+        opts: ParseOptions,
+        visitor: &mut V,
+    ) -> Result<Context> {
+        DemoParser::with_header(self.bytes(), opts, self.header.clone()).run(visitor)
+    }
+
+    /// Streams recorded game events in one pass on the calling thread. An empty
+    /// name filter selects all recorded events. The callback can resolve player
+    /// slots through the context. Entity-derived synthetic rounds require a full parse.
+    ///
+    /// ```no_run
+    /// # use cs2_demo::Demo;
+    /// let demo = Demo::open("match.dem")?;
+    /// demo.for_each_event(&["player_death", "bomb_planted"], |_, event| {
+    ///     println!("{} {}", event.tick, event.name);
+    /// })?;
+    /// # Ok::<(), cs2_demo::Error>(())
+    /// ```
+    pub fn for_each_event(&self, names: &[&str], callback: impl FnMut(&Context, &GameEvent)) -> Result<()> {
+        struct Events<'a, F>(&'a [&'a str], F);
+        impl<F: FnMut(&Context, &GameEvent)> Visitor for Events<'_, F> {
+            fn on_game_event(&mut self, ctx: &Context, event: &GameEvent) {
+                if self.0.is_empty() || self.0.contains(&event.name.as_ref()) {
+                    (self.1)(ctx, event);
+                }
+            }
+        }
+        self.parse_single_threaded(ParseOptions::events_only(), &mut Events(names, callback))?;
+        Ok(())
     }
 
     /// Iterates over raw top-level frames.

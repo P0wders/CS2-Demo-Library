@@ -39,7 +39,6 @@ impl Frame<'_> {
             return Ok(self.payload);
         }
         let len = snap::raw::decompress_len(self.payload)?;
-        buf.clear();
         buf.resize(len, 0);
         snap::raw::Decoder::new().decompress(self.payload, buf)?;
         Ok(&buf[..])

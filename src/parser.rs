@@ -298,14 +298,17 @@ pub struct DemoParser<'a> {
 
 impl<'a> DemoParser<'a> {
     pub fn new(data: &'a [u8], opts: ParseOptions) -> Result<Self> {
-        let header = read_header(data)?;
-        Ok(DemoParser {
+        Ok(Self::with_header(data, opts, read_header(data)?))
+    }
+
+    pub(crate) fn with_header(data: &'a [u8], opts: ParseOptions, header: DemoHeader) -> Self {
+        DemoParser {
             data,
             opts,
             ctx: Context::new(header),
             frame_buf: Vec::new(),
             msg_buf: Vec::new(),
-        })
+        }
     }
 
     pub fn context(&self) -> &Context {

@@ -653,6 +653,13 @@ fn events_only_matches_full_parse_event_stream() {
     d.parse(ParseOptions::default(), &mut b).unwrap();
     assert_eq!(a.0, b.0);
 
+    let names = ["player_death", "bomb_planted"];
+    let mut selected = Vec::new();
+    d.for_each_event(&names, |_, ev| selected.push((ev.tick, ev.name.to_string())))
+        .unwrap();
+    a.0.retain(|(_, name)| names.contains(&name.as_str()));
+    assert_eq!(selected, a.0);
+
     // Player identities are available without entities.
     let ctx = d.parse(ParseOptions::events_only(), &mut ()).unwrap();
     let real: Vec<_> = ctx

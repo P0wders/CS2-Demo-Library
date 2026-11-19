@@ -224,13 +224,10 @@ impl<'a> BitReader<'a> {
     /// Valve "UBitVar": 6-bit prefix whose top two bits select 0/4/8/28 extra bits.
     #[inline]
     pub fn read_ubitvar(&mut self) -> u32 {
-        let ret = self.read_bits(6);
-        match ret & 0x30 {
-            16 => (ret & 15) | (self.read_bits(4) << 4),
-            32 => (ret & 15) | (self.read_bits(8) << 4),
-            48 => (ret & 15) | (self.read_bits(28) << 4),
-            _ => ret,
-        }
+        let word = self.peek_word();
+        let extra = [0, 4, 8, 28][((word >> 4) & 3) as usize];
+        self.advance(6 + extra);
+        (word as u32 & 15) | ((((word >> 6) as u32) & ((1u32 << extra) - 1)) << 4)
     }
 
     /// Variable-length integer used by field-path operations: up to four
@@ -335,20 +332,8 @@ impl<'a> BitReader<'a> {
 
     /// Reads `n` whole bytes (not necessarily byte-aligned).
     pub fn read_bytes(&mut self, n: usize) -> Vec<u8> {
-        if self.pos + n * 8 > self.len_bits {
-            self.overflow = true;
-            self.pos = self.len_bits + 1;
-            return Vec::new();
-        }
-        if self.pos & 7 == 0 {
-            let start = self.pos >> 3;
-            self.pos += n * 8;
-            return self.data[start..start + n].to_vec();
-        }
-        let mut out = Vec::with_capacity(n);
-        for _ in 0..n {
-            out.push(self.read_u8());
-        }
+        let mut out = Vec::new();
+        self.read_bytes_into(&mut out, n);
         out
     }
 
@@ -367,7 +352,16 @@ impl<'a> BitReader<'a> {
             // The last needed bit lives in byte start + n, which exists because
             // pos + 8n <= len_bits and shift > 0.
             let src = &self.data[start..=start + n];
-            out.extend(src.windows(2).map(|w| (w[0] >> shift) | (w[1] << (8 - shift))));
+            out.reserve(n);
+            let words = src[..n].chunks_exact(8);
+            let tail = &src[n - words.remainder().len()..];
+            for (i, chunk) in words.enumerate() {
+                let next = src[(i + 1) * 8];
+                let word = u64::from_le_bytes(chunk.try_into().unwrap());
+                let aligned = (word >> shift) | ((next as u64) << (64 - shift));
+                out.extend_from_slice(&aligned.to_le_bytes());
+            }
+            out.extend(tail.windows(2).map(|w| (w[0] >> shift) | (w[1] << (8 - shift))));
         }
         self.pos += n * 8;
     }
@@ -417,6 +411,30 @@ mod tests {
         let mut r = BitReader::new(&data);
         assert_eq!(r.read_varu32(), 300);
         assert_eq!(r.read_vari32(), -2);
+    }
+
+    #[test]
+    fn bulk_reads_match_individual_bytes() {
+        let data: Vec<u8> = (0..35u8).map(|i| i.wrapping_mul(113)).collect();
+        for offset in 0..8 {
+            for size in 0..=data.len() {
+                let mut reader = BitReader::new(&data);
+                reader.seek(offset);
+                let mut reference = reader.clone();
+                let mut output = vec![42];
+                reader.read_bytes_into(&mut output, size);
+                if size * 8 > reference.remaining_bits() {
+                    assert!(reader.overflowed());
+                    assert_eq!(output, [42]);
+                } else {
+                    let expected: Vec<_> = (0..size).map(|_| reference.read_u8()).collect();
+                    assert_eq!(output[0], 42);
+                    assert_eq!(output[1..], expected);
+                    assert_eq!(reader.position(), reference.position());
+                    assert!(!reader.overflowed());
+                }
+            }
+        }
     }
 
     #[test]
