@@ -6,148 +6,260 @@
 <title>CS2 demo viewer</title>
 <style>
 :root {
-  --bg: #0e1014; --panel: #161920; --panel2: #1d212a; --line: #2a303b; --text: #e7e9ee; --muted: #98a1b1;
-  --t: #e8a33d; --ct: #5b9cf0; --a: #3ec7a0; --b: #c085f5; --bad: #e05d5d; --good: #4fbf7a; --warn: #d9c64b;
-  --radius: 10px; --shadow: 0 1px 2px rgba(0,0,0,.4);
+  --bg: #0a0a0a; --panel: #121212; --panel2: #1a1a1a; --line: #242424; --line2: #1b1b1b; --text: #ededed; --muted: #8b8b8b; --faint: #5a5a5a;
+  --t: #d6a75c; --ct: #7ea6d8; --a: #ededed; --b: #7a7a7a; --on-team: #0a0a0a;
+  --good: #7cc495; --bad: #e57b7b; --warn: #d9b85f;
+  --buy-p: #9a9a9a; --buy-e: #3d3d3d; --buy-se: #5e5e5e; --buy-f: #a3a3a3; --buy-fb: #ededed;
+  --map-bg: #0c0c0d; --floor: #1b1c1f; --floor-edge: #3a3d42;
+  --radius: 14px; --side-w: 236px;
+  --font: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
-    --bg: #f4f5f8; --panel: #ffffff; --panel2: #f0f2f6; --line: #dde1e8; --text: #1b1f27; --muted: #5d6676;
-    --t: #c07a10; --ct: #2f6fd1; --a: #12936f; --b: #8a4fd0; --shadow: 0 1px 2px rgba(0,0,0,.08);
+    --bg: #f6f6f5; --panel: #ffffff; --panel2: #f0f0ee; --line: #e5e5e2; --line2: #eeeeec; --text: #191919; --muted: #6e6e6b; --faint: #a5a5a1;
+    --t: #b07818; --ct: #2f63a8; --a: #191919; --b: #8f8f8a; --on-team: #ffffff;
+    --good: #2e8b57; --bad: #c4473f; --warn: #b8902a;
+    --buy-p: #8f8f8a; --buy-e: #e2e2df; --buy-se: #c4c4c0; --buy-f: #7a7a76; --buy-fb: #191919;
     color-scheme: light;
   }
 }
 :root[data-theme="light"] {
-  --bg: #f4f5f8; --panel: #ffffff; --panel2: #f0f2f6; --line: #dde1e8; --text: #1b1f27; --muted: #5d6676;
-  --t: #c07a10; --ct: #2f6fd1; --a: #12936f; --b: #8a4fd0; --shadow: 0 1px 2px rgba(0,0,0,.08);
+  --bg: #f6f6f5; --panel: #ffffff; --panel2: #f0f0ee; --line: #e5e5e2; --line2: #eeeeec; --text: #191919; --muted: #6e6e6b; --faint: #a5a5a1;
+  --t: #b07818; --ct: #2f63a8; --a: #191919; --b: #8f8f8a; --on-team: #ffffff;
+  --good: #2e8b57; --bad: #c4473f; --warn: #b8902a;
+  --buy-p: #8f8f8a; --buy-e: #e2e2df; --buy-se: #c4c4c0; --buy-f: #7a7a76; --buy-fb: #191919;
   color-scheme: light;
 }
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
 a { color: inherit; }
-header.top { padding: 28px 16px 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
-.wrap { max-width: 1280px; margin: 0 auto; padding: 0 16px; }
-header.top .wrap { padding: 0; }
-.scoreline { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
-.scoreline .team { font-size: 26px; font-weight: 700; }
-.scoreline .score { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
-.scoreline .dash { color: var(--muted); font-size: 26px; }
-.sub { color: var(--muted); margin-top: 6px; display: flex; gap: 14px; flex-wrap: wrap; }
-nav.tabs { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
-nav.tabs .wrap { display: flex; gap: 4px; overflow-x: auto; padding: 8px 16px; }
-nav.tabs a { text-decoration: none; color: var(--muted); padding: 6px 10px; border-radius: 6px; white-space: nowrap; }
-nav.tabs a:hover { color: var(--text); background: var(--panel2); }
-main section { margin: 22px 0; }
-h2 { font-size: 17px; margin: 0 0 12px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-h2 small { font-weight: 400; color: var(--muted); font-size: 13px; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
-.hl .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
-.hl .who { font-weight: 650; font-size: 16px; margin-top: 4px; }
-.hl .num { font-size: 22px; font-weight: 750; font-variant-numeric: tabular-nums; }
+button, select, input { font: inherit; }
+.muted { color: var(--muted); } .good { color: var(--good); } .bad { color: var(--bad); }
+.t { color: var(--t); } .ct { color: var(--ct); }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+code { font-size: 12px; background: var(--panel2); border: 1px solid var(--line); padding: 0 5px; border-radius: 6px; }
+
+/* ---------- controls ---------- */
+select, button.btn { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+button.btn:hover, select:hover { border-color: var(--faint); }
+button.btn:disabled { opacity: .4; cursor: default; }
+button.btn.icon { padding: 6px 10px; line-height: 1; }
+button.btn.primary { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 600; padding: 10px 22px; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); }
+.seg button { background: transparent; border: 0; color: var(--muted); padding: 5px 13px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+.seg button:hover { color: var(--text); }
+.seg button.on { background: var(--text); color: var(--bg); font-weight: 500; }
+.tag { font-size: 11px; padding: 0 7px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+
+/* ---------- app shell ---------- */
+.app { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); min-height: 100vh; }
+.sidenav { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 18px; padding: 20px 14px 16px; background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 6px; font-weight: 600; letter-spacing: -.01em; }
+.brand .logo { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--text); color: var(--bg); }
+.matchcard { padding: 12px 12px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.matchcard .row { display: flex; align-items: center; gap: 8px; }
+.matchcard .row + .row { margin-top: 4px; }
+.matchcard .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.matchcard .sc { font-weight: 650; font-variant-numeric: tabular-nums; }
+.matchcard .row.lost { color: var(--muted); }
+.matchcard .map { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line2); color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; }
+.navlinks { display: grid; gap: 2px; }
+.navlinks a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; color: var(--muted); text-decoration: none; font-weight: 500; }
+.navlinks a svg { flex: none; opacity: .8; }
+.navlinks a:hover { color: var(--text); background: var(--panel2); }
+.navlinks a.on { color: var(--text); background: var(--panel2); }
+.side-actions { margin-top: auto; display: grid; gap: 6px; }
+.side-actions button.btn { text-align: left; border-radius: 9px; background: transparent; border-color: transparent; color: var(--muted); padding: 7px 10px; }
+.side-actions button.btn:hover { color: var(--text); background: var(--panel2); }
+.content { min-width: 0; padding: 30px 36px 56px; }
+.view { max-width: 1320px; scroll-margin-top: 30px; } /* a link to a view (#map, …) opens it at the top, not scrolled */
+.view[hidden] { display: none; }
+.view-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; margin-bottom: 20px; }
+.view-head h1 { font-size: 22px; font-weight: 600; letter-spacing: -.02em; margin: 0; }
+.view-head p { color: var(--muted); margin: 2px 0 0; font-size: 13px; }
+.stack { display: grid; gap: 28px; }
+h2 { font-size: 14px; font-weight: 600; margin: 0 0 12px; display: flex; align-items: baseline; gap: 10px; }
+h2 small { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 12px; }
+.hl .label { color: var(--muted); font-size: 12.5px; }
+.hl .who { font-weight: 500; margin-top: 10px; display: flex; align-items: center; gap: 7px; }
+.hl .num { white-space: nowrap; font-size: 25px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin: 2px 0; }
 .hl .what { color: var(--muted); font-size: 12px; }
+.empty { color: var(--muted); padding: 10px 0; }
+details.notes { color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--line); padding-top: 14px; }
+details.notes summary { cursor: pointer; color: var(--text); font-weight: 500; font-size: 13px; }
+details.notes p { max-width: 860px; margin: 8px 0; }
+
+/* ---------- overview ---------- */
+.scorehead { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px; padding: 26px 28px; }
+.scorehead .team { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.scorehead .team.b { align-items: flex-end; text-align: right; }
+.scorehead .tname { font-size: 20px; font-weight: 600; letter-spacing: -.01em; display: flex; align-items: center; gap: 9px; }
+.scorehead .halves { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.scorehead .score { font-size: 46px; font-weight: 650; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1; display: flex; gap: 14px; align-items: center; }
+.scorehead .score .sep { color: var(--faint); font-weight: 300; }
+.scorehead .score .lost { color: var(--muted); }
+.metachips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-top: 14px; grid-column: 1 / -1; }
+.metachips span { border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 12px; color: var(--muted); }
+
+/* ---------- round chips (overview, replay) ---------- */
+.rchips { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+#rprounds { flex-wrap: nowrap; overflow-x: auto; gap: 3px; padding-bottom: 2px; }
+#rprounds .rchip { flex: 0 0 28px; width: 28px; height: 34px; }
+#rprounds .gap { flex: 0 0 8px; }
+.rchips .gap { width: 10px; }
+.rchip { width: 32px; height: 38px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; font-size: 12px; font-variant-numeric: tabular-nums; background: var(--panel); border: 1px solid var(--line); color: var(--muted); cursor: pointer; position: relative; padding: 0; }
+.rchip i { display: block; width: 14px; height: 3px; border-radius: 2px; }
+.rchip:hover { color: var(--text); border-color: var(--faint); }
+.rchip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.chiplegend { display: flex; gap: 14px; color: var(--muted); font-size: 12px; margin-top: 10px; flex-wrap: wrap; }
+.chiplegend span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ---------- tables ---------- */
 .tablewrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
-th, td { padding: 6px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+th, td { padding: 9px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line2); }
 th:first-child, td:first-child { text-align: left; }
-th { color: var(--muted); font-weight: 600; font-size: 12px; cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--panel); }
-th[title] { text-decoration: underline dotted; text-underline-offset: 3px; }
-th.sorted::after { content: " ▾"; }
-th.sorted.asc::after { content: " ▴"; }
+tbody tr:last-child td { border-bottom: 0; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; cursor: pointer; user-select: none; }
+th.sorted { color: var(--text); }
+th.sorted::after { content: " ↓"; }
+th.sorted.asc::after { content: " ↑"; }
 tbody tr:hover { background: var(--panel2); }
-.teamhead { display: flex; align-items: center; gap: 10px; margin: 4px 0 8px; font-weight: 700; }
-.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--panel2); border: 1px solid var(--line); }
-.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-.seg button { background: transparent; border: 0; color: var(--muted); padding: 5px 11px; cursor: pointer; font: inherit; }
-.seg button + button { border-left: 1px solid var(--line); }
-.seg button.on { background: var(--panel2); color: var(--text); font-weight: 600; }
-select, button.btn { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 5px 9px; font: inherit; }
-button.btn { cursor: pointer; }
-button.btn:hover { border-color: var(--muted); }
-.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
-.good { color: var(--good); } .bad { color: var(--bad); } .muted { color: var(--muted); }
-.t { color: var(--t); } .ct { color: var(--ct); }
-.rounds { display: flex; gap: 3px; overflow-x: auto; padding-bottom: 6px; }
-.round { flex: 0 0 36px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel2); cursor: pointer; text-align: center; padding: 4px 0 3px; font-size: 11px; }
-.round:hover { border-color: var(--muted); }
-.round.sel { outline: 2px solid var(--text); outline-offset: 1px; }
-.round .n { color: var(--muted); }
-.round .w { height: 20px; display: grid; place-items: center; font-size: 13px; font-weight: 700; color: #111; border-radius: 4px; margin: 2px 3px; }
-.round .buy { font-size: 9.5px; font-weight: 700; border-radius: 3px; margin: 2px 3px 0; color: #111; }
-.half { flex: 0 0 8px; }
-.rdetail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 14px; margin-top: 12px; }
-@media (max-width: 860px) { .rdetail { grid-template-columns: 1fr; } }
+.teamhead { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-weight: 600; }
+.teamhead + .tablewrap { margin-bottom: 18px; }
+.foot-note { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
+
+/* ---------- rounds ---------- */
+.rounds { display: flex; gap: 4px; overflow-x: auto; padding: 2px 2px 6px; }
+.round { flex: 0 0 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; text-align: center; padding: 5px 0 4px; font-size: 11px; }
+.round:hover { border-color: var(--faint); }
+.round.sel { outline: 1.5px solid var(--text); outline-offset: 1px; }
+.round .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.round .w { height: 22px; display: grid; place-items: center; font-size: 13px; font-weight: 700; color: var(--on-team); border-radius: 7px; margin: 3px 4px; }
+.round .buy { font-size: 10px; font-weight: 600; color: var(--muted); height: 14px; }
+.half { flex: 0 0 10px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 12px; margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.rdetail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 16px; margin-top: 16px; }
+@media (max-width: 960px) { .rdetail { grid-template-columns: 1fr; } }
+.rdetail h3 { font-size: 16px; font-weight: 600; margin: 0 0 10px; display: flex; gap: 10px; align-items: baseline; }
+.rdetail h3 small { font-size: 13px; font-weight: 400; color: var(--muted); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; }
+.kv > div:nth-child(odd) { color: var(--muted); }
 .feed { list-style: none; margin: 0; padding: 0; }
-.feed li { padding: 4px 0; border-bottom: 1px dashed var(--line); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-.feed .time { color: var(--muted); font-variant-numeric: tabular-nums; width: 44px; flex: none; }
-.tag { font-size: 10.5px; padding: 0 5px; border-radius: 4px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); }
-.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
-.kv div:nth-child(odd) { color: var(--muted); }
-.legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 12px; margin-top: 8px; }
-.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.feed li { padding: 7px 0; border-bottom: 1px solid var(--line2); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.feed li:last-child { border-bottom: 0; }
+.feed .time { color: var(--muted); font-variant-numeric: tabular-nums; width: 40px; flex: none; }
 svg text { fill: var(--muted); font-size: 11px; }
-.mapgrid { display: grid; grid-template-columns: minmax(0, 860px) minmax(260px, 1fr); gap: 14px; align-items: start; }
-@media (max-width: 1100px) { .mapgrid { grid-template-columns: 1fr; } }
-.canvasbox { position: relative; background: #0a0c10; border-radius: var(--radius); border: 1px solid var(--line); overflow: hidden; touch-action: none; }
+
+/* ---------- 2D replay ---------- */
+.rp-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.rp-bar .grow { flex: 1; }
+.rp { display: grid; grid-template-columns: 220px minmax(0, 1fr) 220px; gap: 14px; align-items: start; }
+.rp.analysis { grid-template-columns: minmax(0, 1fr) 290px; }
+.rp.analysis #hudA { display: none; }
+@media (max-width: 1180px) { .rp, .rp.analysis { grid-template-columns: 1fr; } .rp #hudA { order: 2; } .rp #mapside { order: 3; } }
+.rp-stage { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.rp-score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; padding: 8px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.rp-score .sd { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.rp-score .sd.b { justify-content: flex-end; }
+.rp-score .tn { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-score .sc { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.rp-score .mid { text-align: center; line-height: 1.2; }
+.rp-score .rn { font-size: 11.5px; color: var(--muted); }
+.rp-score .clk { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.rp-score .clk.bomb { color: var(--bad); }
+.sidetag { font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 5px; letter-spacing: .03em; }
+.sidetag.t { background: color-mix(in srgb, var(--t) 18%, transparent); }
+.sidetag.ct { background: color-mix(in srgb, var(--ct) 18%, transparent); }
+.canvasbox { position: relative; display: grid; place-items: center; background: var(--map-bg); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; touch-action: none; }
 canvas#radar { display: block; cursor: grab; }
 canvas#radar.drag { cursor: grabbing; }
-.tip { position: absolute; pointer-events: none; background: rgba(12,14,18,.94); color: #e7e9ee; border: 1px solid #3a4150; border-radius: 7px; padding: 6px 8px; font-size: 12px; max-width: 280px; display: none; z-index: 3; }
-.hint { position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: #8d96a6; pointer-events: none; }
+.killfeed { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; pointer-events: none; }
+.kf { display: flex; gap: 7px; align-items: center; padding: 4px 10px; border-radius: 8px; background: rgba(12,12,12,.78); border: 1px solid rgba(255,255,255,.07); color: #ededed; font-size: 12px; backdrop-filter: blur(6px); }
+.kf .wp { color: #9a9a9a; }
+.kf .t { color: #e3b56a; } .kf .ct { color: #8db4e6; }
+.kf .hs { font-size: 10px; color: #9a9a9a; }
+.tip { position: absolute; pointer-events: none; background: rgba(12,12,12,.94); color: #ededed; border: 1px solid #333; border-radius: 9px; padding: 7px 9px; font-size: 12px; max-width: 280px; display: none; z-index: 3; }
+.hint { position: absolute; left: 12px; bottom: 9px; font-size: 11px; color: #6c6c6c; pointer-events: none; }
+.transport { display: flex; align-items: center; gap: 8px; }
+.transport .clockmini { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; min-width: 76px; text-align: right; }
+.scrub { position: relative; flex: 1; height: 32px; min-width: 160px; }
+.scrub .marks { position: absolute; left: 7px; right: 7px; top: 0; height: 10px; }
+.scrub .mk { position: absolute; top: 1px; width: 3px; height: 8px; border-radius: 2px; transform: translateX(-50%); cursor: pointer; }
+.scrub .mk.bomb { width: 8px; height: 8px; top: 1px; border-radius: 2px; transform: translateX(-50%) rotate(45deg); background: var(--bad); }
+.scrub input[type=range] { position: absolute; left: 0; right: 0; top: 13px; width: 100%; height: 18px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; --p: 0%; }
+.scrub input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--text) var(--p), var(--panel2) var(--p)); }
+.scrub input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--text) var(--p), var(--panel2) var(--p)); }
+.scrub input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: var(--text); border: 3px solid var(--bg); box-shadow: 0 0 0 1px var(--line); }
+.scrub input[type=range]::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: var(--text); border: 3px solid var(--bg); }
+.hudcol { display: grid; gap: 6px; }
+.hudhead { display: flex; align-items: center; gap: 8px; font-weight: 600; padding: 2px 2px 4px; }
+.hudhead .alive { margin-left: auto; font-weight: 400; color: var(--muted); font-size: 12px; }
+.pcard { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; padding: 9px 11px; border-radius: 11px; background: var(--panel); border: 1px solid var(--line); cursor: pointer; }
+.pcard:hover { border-color: var(--faint); }
+.pcard.focus { border-color: var(--text); }
+.pcard.dead { opacity: .38; }
+.pcard .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcard .hpn { font-weight: 600; font-variant-numeric: tabular-nums; }
+.pcard .hp { grid-column: 1 / -1; height: 4px; background: var(--panel2); border-radius: 2px; overflow: hidden; }
+.pcard .hp > i { display: block; height: 100%; border-radius: 2px; }
+.pcard .meta { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; }
+.pcard .meta b { color: var(--text); font-weight: 500; }
+.pcard .icons { display: inline-flex; gap: 4px; }
 .side { display: flex; flex-direction: column; gap: 12px; }
-.timeline { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-.timeline input[type=range] { flex: 1 1 200px; accent-color: var(--text); }
-.clock { font-variant-numeric: tabular-nums; min-width: 92px; text-align: center; font-weight: 650; }
-.hud { display: grid; gap: 6px; }
-.hudrow { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; padding: 4px 6px; border-radius: 6px; background: var(--panel2); }
-.hudrow.dead { opacity: .45; }
-.hudrow .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hudrow .wp { color: var(--muted); font-size: 12px; text-align: right; }
-.hp { grid-column: 1 / -1; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
-.hp > i { display: block; height: 100%; }
-.list { max-height: 420px; overflow: auto; }
-.list .item { padding: 6px 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+.list { max-height: 520px; overflow: auto; }
+.list .item { padding: 7px 9px; border-radius: 9px; cursor: pointer; border: 1px solid transparent; }
 .list .item:hover, .list .item.on { background: var(--panel2); border-color: var(--line); }
-footer { color: var(--muted); font-size: 12px; padding: 24px 16px 40px; border-top: 1px solid var(--line); margin-top: 30px; }
-footer p { max-width: 900px; margin: 6px 0; }
-.empty { color: var(--muted); padding: 10px 0; }
-.wbar { display: inline-block; height: 6px; border-radius: 3px; background: var(--muted); vertical-align: middle; margin-left: 6px; opacity: .6; }
-.topbar { display: flex; gap: 14px 20px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
-.actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
-/* ---------- start screen: drop a demo ---------- */
+/* ---------- start screen ---------- */
 .start { min-height: 100vh; display: grid; place-items: center; padding: 32px 16px; }
 .start[hidden] { display: none; }
-.dropcard { width: min(600px, 100%); text-align: center; background: var(--panel); border: 2px dashed var(--line); border-radius: 18px; padding: 44px 28px 28px; box-shadow: var(--shadow); transition: border-color .15s, background-color .15s; }
-body.dragging .dropcard { border-color: var(--a); background: color-mix(in srgb, var(--a) 7%, var(--panel)); }
-.mark { width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 14px; display: grid; place-items: center; background: var(--panel2); border: 1px solid var(--line); color: var(--a); }
-.dropcard h1 { font-size: 24px; margin: 0 0 6px; letter-spacing: -.01em; }
-.lead { color: var(--muted); margin: 0 0 22px; font-size: 15px; }
+.dropcard { width: min(560px, 100%); text-align: center; background: var(--panel); border: 1px solid var(--line); border-radius: 24px; padding: 54px 36px 30px; transition: border-color .15s, background-color .15s; }
+body.dragging .dropcard { border-color: var(--text); background: var(--panel2); }
+.mark { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 16px; display: grid; place-items: center; background: var(--panel2); border: 1px solid var(--line); color: var(--text); }
+.dropcard h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; letter-spacing: -.02em; }
+.lead { color: var(--muted); margin: 0 0 24px; font-size: 15px; }
 .lead b { color: var(--text); }
-button.btn.primary { background: var(--a); color: #06140f; border-color: var(--a); font-weight: 650; padding: 9px 18px; font-size: 15px; }
-button.btn.primary:hover { filter: brightness(1.08); border-color: var(--a); }
-.fine { color: var(--muted); font-size: 12.5px; margin: 22px auto 0; max-width: 470px; }
+.fine { color: var(--muted); font-size: 12.5px; margin: 24px auto 0; max-width: 460px; }
 .fine + .fine { margin-top: 8px; }
-code { font-size: 12px; background: var(--panel2); border: 1px solid var(--line); padding: 0 5px; border-radius: 4px; }
 .progress { text-align: left; }
-.pname { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bar { height: 8px; margin-top: 12px; background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
-.bar > i { display: block; height: 100%; width: 0; background: var(--a); transition: width .2s; }
+.pname { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar { height: 6px; margin-top: 14px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--text); border-radius: 3px; transition: width .2s; }
 .bar.busy > i { width: 35%; animation: busy 1.1s ease-in-out infinite alternate; }
 @keyframes busy { from { margin-left: 0; } to { margin-left: 65%; } }
 .pmeta { color: var(--muted); font-size: 12.5px; display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font-variant-numeric: tabular-nums; }
 .prow { display: flex; justify-content: flex-end; margin-top: 14px; }
-.alert, .notice { margin-top: 18px; text-align: left; border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.alert { background: color-mix(in srgb, var(--bad) 12%, var(--panel)); border: 1px solid color-mix(in srgb, var(--bad) 45%, var(--line)); }
+.alert, .notice { margin-top: 18px; text-align: left; border-radius: 12px; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.alert { background: color-mix(in srgb, var(--bad) 12%, var(--panel)); border: 1px solid color-mix(in srgb, var(--bad) 40%, var(--line)); }
 .notice { background: var(--panel2); border: 1px solid var(--line); }
 #back { margin-top: 12px; }
-#veil { position: fixed; inset: 10px; z-index: 50; display: none; place-items: center; border: 3px dashed var(--a); border-radius: 18px; background: color-mix(in srgb, var(--bg) 80%, transparent); pointer-events: none; }
+#veil { position: fixed; inset: 12px; z-index: 50; display: none; place-items: center; border: 2px dashed var(--text); border-radius: 20px; background: color-mix(in srgb, var(--bg) 80%, transparent); pointer-events: none; }
 body.dragging.has-report #veil { display: grid; }
-#veil div { font-size: 19px; font-weight: 700; background: var(--panel); border: 1px solid var(--line); padding: 14px 22px; border-radius: 12px; box-shadow: var(--shadow); }
-.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 60; background: var(--panel); border: 1px solid var(--line); padding: 10px 14px; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.35); width: max-content; max-width: calc(100% - 32px); }
+#veil div { font-size: 18px; font-weight: 600; background: var(--panel); border: 1px solid var(--line); padding: 14px 22px; border-radius: 14px; }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 60; background: var(--panel); border: 1px solid var(--line); padding: 10px 14px; border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.3); width: max-content; max-width: calc(100% - 32px); }
 @media (prefers-reduced-motion: reduce) { .bar > i, .dropcard { transition: none; } .bar.busy > i { animation: none; width: 100%; opacity: .5; } }
+
+/* ---------- small screens: the sidebar becomes a top bar ---------- */
+@media (max-width: 860px) {
+  .app { grid-template-columns: 1fr; }
+  .sidenav { position: sticky; z-index: 5; height: auto; flex-direction: row; align-items: center; gap: 10px; padding: 10px 12px; border-right: 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .brand span, .matchcard, .side-actions { display: none; }
+  .navlinks { display: flex; }
+  .navlinks a { white-space: nowrap; }
+  .navlinks a svg { display: none; }
+  .content { padding: 20px 14px 40px; }
+  .view { scroll-margin-top: 80px; } /* clear of the sticky top bar */
+  .transport { flex-wrap: wrap; }
+  .transport .scrub { flex-basis: 100%; order: -1; }
+  .scorehead { grid-template-columns: 1fr; text-align: center; }
+  .scorehead .team, .scorehead .team.b { align-items: center; text-align: center; }
+}
 </style>
 </head>
 <body>
@@ -176,41 +288,74 @@ body.dragging.has-report #veil { display: grid; }
 <input type="file" id="file-radar" accept="image/*" multiple hidden>
 
 <template id="skeleton">
-<header class="top"><div class="wrap topbar"><div id="head"></div>
-  <div class="actions">
+<div class="app">
+<aside class="sidenav">
+  <div class="brand"><div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></div><span>CS2 Demo Library</span></div>
+  <div class="matchcard" id="matchcard"></div>
+  <nav class="navlinks" id="navlinks">
+    <a href="#overview" data-view="overview"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg>Overview</a>
+    <a href="#map" data-view="map"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>2D Replay</a>
+    <a href="#scoreboard" data-view="scoreboard"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Scoreboard</a>
+    <a href="#rounds" data-view="rounds"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Rounds</a>
+    <a href="#economy" data-view="economy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16M8 15l4-4 3 3 5-6"/></svg>Economy</a>
+    <a href="#utility" data-view="utility"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="14" r="4.5"/><circle cx="15.5" cy="10.5" r="5"/></svg>Utility</a>
+    <a href="#aim" data-view="aim"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg>Aim</a>
+    <a href="#clutches" data-view="clutches"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z"/></svg>Clutches</a>
+  </nav>
+  <div class="side-actions">
     <button class="btn" type="button" data-act="open">Open demo…</button>
     <button class="btn" type="button" data-act="radar" title="A square radar overview of this map, drawn under the positions">Radar image…</button>
     <button class="btn" type="button" data-act="save" title="One HTML file with this report inside, to keep or share">Save report</button>
-  </div></div></header>
-<nav class="tabs"><div class="wrap">
-  <a href="#overview">Overview</a><a href="#scoreboard">Scoreboard</a><a href="#rounds">Rounds</a>
-  <a href="#economy">Economy</a><a href="#map">Map &amp; replay</a><a href="#utility">Utility</a>
-  <a href="#aim">Aim</a><a href="#clutches">Clutches</a>
-</div></nav>
-<main class="wrap">
-  <section id="overview"><h2>Highlights</h2><div class="cards" id="highlights"></div></section>
-  <section id="scoreboard"><h2>Scoreboard <small>click a column to sort</small></h2>
-    <div class="toolbar"><div class="seg" id="sbside"></div></div>
-    <div class="card" id="sbtables"></div></section>
-  <section id="rounds"><h2>Rounds <small>click a round for details and its replay</small></h2>
-    <div class="card"><div class="rounds" id="strip"></div>
-    <div class="legend" id="striplegend"></div>
-    <div class="rdetail" id="rdetail"></div></div></section>
-  <section id="economy"><h2>Economy <small>team equipment value when freeze time ends</small></h2>
-    <div class="card"><svg id="eco" width="100%" role="img" aria-label="Equipment value per round"></svg>
-    <div class="legend" id="ecolegend"></div></div></section>
-  <section id="map"><h2>Map &amp; replay <small id="mapnote"></small></h2>
-    <div class="toolbar" id="maptools"></div>
-    <div class="mapgrid">
-      <div><div class="canvasbox" id="canvasbox"><canvas id="radar" width="1024" height="1024"></canvas><div class="tip" id="tip"></div><div class="hint">scroll to zoom · drag to pan · double-click to reset</div></div>
-        <div class="timeline" id="timeline"></div></div>
+    <button class="btn" type="button" data-act="theme" id="themebtn">Theme</button>
+  </div>
+</aside>
+<main class="content">
+  <section class="view stack" id="overview">
+    <div class="card scorehead" id="scorehead"></div>
+    <div><h2>Highlights</h2><div class="cards" id="highlights"></div></div>
+    <div><h2>Round history <small>click a round to watch it</small></h2><div class="card"><div class="rchips" id="ovrounds"></div><div class="chiplegend" id="ovlegend"></div></div></div>
+    <details class="notes" id="notes"><summary>How these numbers are calculated</summary></details>
+  </section>
+  <section class="view" id="map">
+    <div class="rp-bar" id="maptools"></div>
+    <div class="rp" id="rp">
+      <div class="hudcol" id="hudA"></div>
+      <div class="rp-stage">
+        <div class="rp-score" id="rpscore"></div>
+        <div class="canvasbox" id="canvasbox"><canvas id="radar" width="1024" height="1024"></canvas><div class="killfeed" id="killfeed"></div><div class="tip" id="tip"></div><div class="hint" id="maphint">scroll to zoom · drag to pan · double-click to reset</div></div>
+        <div class="transport" id="timeline"></div>
+        <div class="rchips" id="rprounds"></div>
+      </div>
       <div class="side" id="mapside"></div>
-    </div></section>
-  <section id="utility"><h2>Utility</h2><div class="card tablewrap" id="utiltable"></div></section>
-  <section id="aim"><h2>Aim &amp; mechanics <small>from every shot; approximate (64-tick demos)</small></h2><div class="card tablewrap" id="aimtable"></div></section>
-  <section id="clutches"><h2>Clutches</h2><div class="card tablewrap" id="clutchtable"></div></section>
+    </div>
+  </section>
+  <section class="view" id="scoreboard">
+    <div class="view-head"><div><h1>Scoreboard</h1><p>Click a column to sort</p></div><div class="rp-bar" style="margin:0"><div class="seg" id="sbside"></div><div class="seg" data-detail="scoreboard"></div></div></div>
+    <div class="card" id="sbtables"></div>
+  </section>
+  <section class="view" id="rounds">
+    <div class="view-head"><div><h1>Rounds</h1><p>Click a round for its kills, economy and bomb</p></div></div>
+    <div class="card"><div class="rounds" id="strip"></div><div class="legend" id="striplegend"></div></div>
+    <div class="card rdetail" id="rdetail"></div>
+  </section>
+  <section class="view" id="economy">
+    <div class="view-head"><div><h1>Economy</h1><p>Team equipment value when freeze time ends · click a point to open the round</p></div></div>
+    <div class="card"><svg id="eco" width="100%" role="img" aria-label="Equipment value per round"></svg><div class="legend" id="ecolegend"></div></div>
+  </section>
+  <section class="view" id="utility">
+    <div class="view-head"><div><h1>Utility</h1><p>Grenades thrown, enemies blinded and damage</p></div><div class="seg" data-detail="utility"></div></div>
+    <div class="card tablewrap" id="utiltable"></div>
+  </section>
+  <section class="view" id="aim">
+    <div class="view-head"><div><h1>Aim &amp; mechanics</h1><p>From every shot; approximate on 64-tick demos</p></div><div class="seg" data-detail="aim"></div></div>
+    <div class="card tablewrap" id="aimtable"></div>
+  </section>
+  <section class="view" id="clutches">
+    <div class="view-head"><div><h1>Clutches</h1><p>Last player alive on their side against one or more enemies</p></div></div>
+    <div class="card tablewrap" id="clutchtable"></div>
+  </section>
 </main>
-<footer><div class="wrap" id="foot"></div></footer>
+</div>
 </template>
 
 <!-- The analyzer (cs2_demo compiled to WebAssembly, base64), put here by `cargo run -p cs2_demo_web`. -->
@@ -226,6 +371,11 @@ window.addEventListener("error", (e) => {
   pre.textContent = "The viewer hit an error: " + (e.error && e.error.stack ? e.error.stack : e.message);
   document.body.prepend(pre);
 });
+// Rounded rectangles on a canvas came with Chrome 99, Firefox 112 and Safari 16;
+// the analyzer runs from Chrome 91 and Firefox 89, so draw square corners there.
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h) { this.rect(x, y, w, h); };
+}
 
 /* ---------- the analyzer: runs in a worker, or on the page if workers are blocked ---------- */
 // One analyzer: `load` gives it the compiled module, `run` one demo. Workers
@@ -560,7 +710,18 @@ el("report").addEventListener("click", (e) => {
   if (act === "open") el("file-demo").click();
   else if (act === "radar") el("file-radar").click();
   else if (act === "save") saveReport();
+  else if (act === "theme") {
+    const dark = getComputedStyle(document.documentElement).colorScheme.includes("dark");
+    setTheme(dark ? "light" : "dark");
+    if (current) render(true);
+  }
 });
+// Light or dark: the system's choice until the theme button is used, then that choice (remembered when the browser allows it).
+function setTheme(theme) {
+  if (theme) document.documentElement.dataset.theme = theme;
+  try { if (theme) localStorage.setItem("cs2-demo-viewer-theme", theme); } catch {}
+}
+try { const saved = localStorage.getItem("cs2-demo-viewer-theme"); if (saved) document.documentElement.dataset.theme = saved; } catch {}
 
 if (!CAN_ANALYZE) {
   el("lead").innerHTML = "This is the viewer's source page. Build the viewer with <code>cargo run -p cs2_demo_web</code>, then open <code>web/dist/cs2-demo-viewer.html</code>.";
@@ -622,6 +783,9 @@ const mmss = (sec) => {
 const sideOf = (s) => (s === "Terrorist" ? "t" : s === "CounterTerrorist" ? "ct" : "");
 const SIDE_LABEL = { t: "T", ct: "CT" };
 const sideColor = (s) => (sideOf(s) === "t" ? css("--t") : sideOf(s) === "ct" ? css("--ct") : css("--muted"));
+// The map stays dark in both themes, so it has its own T and CT colors.
+const MAP_SIDE = { t: "#e0b062", ct: "#86aee3" };
+const mapColor = (s) => MAP_SIDE[sideOf(s)] || "#9a9a9a";
 
 const WNAME = { ak47: "AK-47", m4a1: "M4A4", m4a1_silencer: "M4A1-S", awp: "AWP", ssg08: "SSG 08", usp_silencer: "USP-S",
   hkp2000: "P2000", glock: "Glock-18", deagle: "Desert Eagle", galilar: "Galil AR", famas: "FAMAS", aug: "AUG", sg556: "SG 553",
@@ -638,8 +802,9 @@ const DEFS = { 1: "deagle", 2: "elite", 3: "fiveseven", 4: "glock", 7: "ak47", 8
   47: "decoy", 48: "incgrenade", 49: "c4", 60: "m4a1_silencer", 61: "usp_silencer", 63: "cz75a", 64: "revolver" };
 const defName = (d) => (d === 42 || d === 59 || (d >= 500 && d < 600) ? "Knife" : d === 49 ? "C4" : wname(DEFS[d] || ""));
 
-const BUY = { Pistol: ["P", "Pistol", "#8f9bb3"], Eco: ["E", "Eco", "#e05d5d"], SemiEco: ["SE", "Semi-eco", "#e8954a"],
-  Force: ["F", "Force buy", "#d9c64b"], FullBuy: ["FB", "Full buy", "#4fbf7a"] };
+// Buy types go from dim to bright: one scale of the theme's own grays, no extra hues.
+const BUY = { Pistol: ["P", "Pistol", css("--buy-p")], Eco: ["E", "Eco", css("--buy-e")], SemiEco: ["SE", "Semi-eco", css("--buy-se")],
+  Force: ["F", "Force buy", css("--buy-f")], FullBuy: ["FB", "Full buy", css("--buy-fb")] };
 const GKIND = { Smoke: ["Smoke", "#b8bec9"], Flashbang: ["Flashbang", "#f3f3f3"], HeGrenade: ["HE", "#ff5a5a"],
   Molotov: ["Molotov", "#ff7a30"], Incendiary: ["Incendiary", "#ffa040"], Decoy: ["Decoy", "#8a8f99"] };
 const isFire = (k) => k === "Molotov" || k === "Incendiary";
@@ -683,17 +848,44 @@ const roundTime = (r, tick) => (r.freeze_end_tick != null ? (tick - r.freeze_end
 
 /* ---------- header ---------- */
 document.title = `${TA.name} vs ${TB.name} · ${S.map}`;
-$("#head").append(
-  h("div", { class: "scoreline" },
-    h("span", { class: "dot", style: `background:${css("--a")};width:14px;height:14px` }),
-    h("span", { class: "team" }, TA.name), h("span", { class: "score" }, TA.score),
-    h("span", { class: "dash" }, "–"), h("span", { class: "score" }, TB.score), h("span", { class: "team" }, TB.name),
-    h("span", { class: "dot", style: `background:${css("--b")};width:14px;height:14px` })),
-  h("div", { class: "sub" },
+const teamDot = (t) => h("span", { class: "dot", style: `background:${teamColor(t.name)}` });
+const halves = (t) => `${t.score_first_half} · ${t.score_second_half}${t.score_overtime ? " · OT " + t.score_overtime : ""}`;
+$("#matchcard").append(
+  ...[TA, TB].map((t) => h("div", { class: "row" + (t.score < Math.max(TA.score, TB.score) ? " lost" : "") }, teamDot(t), h("span", { class: "nm" }, t.name), h("span", { class: "sc" }, t.score))),
+  h("div", { class: "map" }, h("span", null, S.map), h("span", null, `${S.rounds.length} rounds`)));
+$("#scorehead").append(
+  h("div", { class: "team" }, h("div", { class: "tname" }, teamDot(TA), TA.name), h("div", { class: "halves" }, "Halves " + halves(TA))),
+  h("div", { class: "score" }, h("span", { class: TA.score < TB.score ? "lost" : null }, TA.score), h("span", { class: "sep" }, ":"), h("span", { class: TB.score < TA.score ? "lost" : null }, TB.score)),
+  h("div", { class: "team b" }, h("div", { class: "tname" }, TB.name, teamDot(TB)), h("div", { class: "halves" }, "Halves " + halves(TB))),
+  h("div", { class: "metachips" },
     h("span", null, S.map), M.server ? h("span", null, M.server) : null,
     M.duration ? h("span", null, "recording " + mmss(M.duration)) : null,
-    h("span", null, `${S.rounds.length} rounds`), M.build ? h("span", null, `build ${M.build}`) : null,
-    M.file ? h("span", null, M.file) : null));
+    M.build ? h("span", null, `build ${M.build}`) : null, M.file ? h("span", null, M.file) : null));
+
+/* ---------- views: one section at a time ---------- */
+const VIEWS = ["overview", "map", "scoreboard", "rounds", "economy", "utility", "aim", "clutches"];
+let shownView = null;
+function showView(name) {
+  if (!VIEWS.includes(name)) name = "overview";
+  for (const v of VIEWS) document.getElementById(v).hidden = v !== name;
+  for (const a of document.querySelectorAll("#navlinks a")) a.classList.toggle("on", a.dataset.view === name);
+  if (viewOfHash() !== name) history.replaceState(null, "", "#" + name);
+  if (shownView !== name) scrollTo(0, 0);
+  shownView = name;
+  if (name === "map") requestAnimationFrame(resizeCanvas);
+}
+const viewOfHash = () => { const k = location.hash.slice(1).split("-")[0]; return k === "round" ? "map" : k; };
+addEventListener("hashchange", () => { showView(viewOfHash()); openMoment(); }, { signal });
+
+// "Key stats" / "All stats" switches: tables show their main columns unless asked for every one.
+const detailed = {};
+function detailSwitch(name, rerender) {
+  const seg = document.querySelector(`[data-detail="${name}"]`);
+  const paint = () => seg.replaceChildren(...[[false, "Key stats"], [true, "All stats"]].map(([v, l]) =>
+    h("button", { class: !!detailed[name] === v ? "on" : null, onclick: () => { detailed[name] = v; paint(); rerender(); } }, l)));
+  paint();
+}
+const visible = (cols, name) => cols.filter((c) => c && (!c.extra || detailed[name]));
 
 /* ---------- highlights ---------- */
 (function highlights() {
@@ -769,21 +961,22 @@ const nameCell = (p) => h("span", null, h("span", { class: "dot", style: `backgr
         { key: "adr", label: "ADR", title: "Average damage per round", value: (x) => x.r.adr, show: (x) => x.r.adr.toFixed(1) },
         { key: "kast", label: "KAST", title: "Rounds with a kill, assist, survival or trade", value: (x) => x.r.kast, show: (x) => Math.round(x.r.kast * 100) + "%" },
         { key: "hs", label: "HS %", value: (x) => x.r.hs, show: (x) => Math.round(x.r.hs * 100) + "%" },
-        { key: "op", label: "Opening", title: "Opening kills – opening deaths", value: (x) => x.s.opening_kills - x.s.opening_deaths, show: (x) => `${x.s.opening_kills}–${x.s.opening_deaths}` },
-        { key: "tr", label: "Trades", title: "Kills that traded a teammate", value: (x) => x.s.trade_kills },
-        { key: "mk", label: "3K+", title: "Rounds with 3 or more kills", value: (x) => x.s.multi_kills[3] + x.s.multi_kills[4] + x.s.multi_kills[5] },
-        side === "all" ? { key: "cl", label: "Clutches", title: "Clutches won / entered", value: (x) => x.p.clutches_won * 100 + x.p.clutches, show: (x) => `${x.p.clutches_won}/${x.p.clutches}` } : null,
-        { key: "imp", label: "Impact*", title: "Community approximation of HLTV Impact", value: (x) => x.r.impact, show: (x) => x.r.impact.toFixed(2) },
-        { key: "r2", label: "Rating 2.0*", title: "Community approximation of HLTV Rating 2.0", value: (x) => x.r.rating2, show: (x) => x.r.rating2.toFixed(2) },
+        { extra: true, key: "op", label: "Opening", title: "Opening kills – opening deaths", value: (x) => x.s.opening_kills - x.s.opening_deaths, show: (x) => `${x.s.opening_kills}–${x.s.opening_deaths}` },
+        { extra: true, key: "tr", label: "Trades", title: "Kills that traded a teammate", value: (x) => x.s.trade_kills },
+        { extra: true, key: "mk", label: "3K+", title: "Rounds with 3 or more kills", value: (x) => x.s.multi_kills[3] + x.s.multi_kills[4] + x.s.multi_kills[5] },
+        side === "all" ? { extra: true, key: "cl", label: "Clutches", title: "Clutches won / entered", value: (x) => x.p.clutches_won * 100 + x.p.clutches, show: (x) => `${x.p.clutches_won}/${x.p.clutches}` } : null,
+        { extra: true, key: "imp", label: "Impact*", title: "Community approximation of HLTV Impact", value: (x) => x.r.impact, show: (x) => x.r.impact.toFixed(2) },
+        { extra: true, key: "r2", label: "Rating 2.0*", title: "Community approximation of HLTV Rating 2.0", value: (x) => x.r.rating2, show: (x) => x.r.rating2.toFixed(2) },
         { key: "r1", label: "Rating 1.0", title: "HLTV Rating 1.0 (published formula)", value: (x) => x.r.rating, show: (x) => h("b", null, x.r.rating.toFixed(2)) },
-      ].filter(Boolean);
+      ];
       const sideNote = side === "all" ? "" : ` · ${rows.reduce((a, x) => a + x.s.rounds_won, 0) / Math.max(1, rows.length) | 0} rounds won as ${SIDE_LABEL[side]}`;
       box.append(h("div", { class: "teamhead" }, h("span", { class: "dot", style: `background:${teamColor(t.name)}` }), t.name,
-        h("span", { class: "muted", style: "font-weight:400" }, `${t.score} rounds · first half ${t.score_first_half}, second half ${t.score_second_half}${t.score_overtime ? ", overtime " + t.score_overtime : ""}${sideNote}`)),
-        table(cols, rows, "r1"));
+        h("span", { class: "muted", style: "font-weight:400" }, `${t.score} rounds${sideNote}`)),
+        table(visible(cols, "scoreboard"), rows, "r1"));
     }
-    box.append(h("p", { class: "muted", style: "margin:10px 0 0;font-size:12px" }, "* Approximations: HLTV has not published the Impact and Rating 2.0 formulas."));
+    if (detailed.scoreboard) box.append(h("p", { class: "foot-note" }, "* Approximations: HLTV has not published the Impact and Rating 2.0 formulas."));
   };
+  detailSwitch("scoreboard", render);
   render();
 })();
 
@@ -794,7 +987,7 @@ function selectRound(n, scroll) {
   selectedRound = n;
   if (scroll) { view.mode = "replay"; view.lineup = -1; }
   for (const f of roundListeners) f(n);
-  if (scroll) document.getElementById("map").scrollIntoView();
+  if (scroll) showView("map");
 }
 
 (function rounds() {
@@ -808,7 +1001,7 @@ function selectRound(n, scroll) {
     const [label, icon] = how(r);
     const ecoA = sideA ? (sideA === "Terrorist" ? r.t_economy : r.ct_economy) : null;
     const ecoB = sideA ? (sideA === "Terrorist" ? r.ct_economy : r.t_economy) : null;
-    const buy = (e) => (e && BUY[e.buy] ? h("div", { class: "buy", style: `background:${BUY[e.buy][2]}`, title: BUY[e.buy][1] }, BUY[e.buy][0]) : h("div", { class: "buy" }, " "));
+    const buy = (e) => (e && BUY[e.buy] ? h("div", { class: "buy", title: BUY[e.buy][1] }, BUY[e.buy][0]) : h("div", { class: "buy" }, " "));
     const cell = h("div", {
       class: "round", title: `Round ${r.number}: ${r.winner_name || "?"} (${SIDE_LABEL[sideOf(r.winner)] || "?"}) · ${label}`,
       onclick: () => selectRound(r.number),
@@ -818,9 +1011,10 @@ function selectRound(n, scroll) {
     strip.append(cell);
   }
   $("#striplegend").append(
-    h("span", null, "Top row: ", TA.name, " buy · bottom row: ", TB.name, " buy"),
-    ...Object.values(BUY).map(([a, l, c]) => h("span", null, h("i", { class: "dot", style: `background:${c}` }), `${a} = ${l}`)),
-    h("span", null, "✕ elimination · ✹ bomb exploded · ✂ defused · ◷ time"));
+    h("span", null, teamDot(TA), TA.name), h("span", null, teamDot(TB), TB.name),
+    h("span", null, `Buy above and below: ${TA.name} on top`),
+    h("span", null, Object.values(BUY).map(([a, l]) => `${a} ${l.toLowerCase()}`).join(" · ")),
+    h("span", null, "✕ elimination · ✹ exploded · ✂ defused · ◷ time"));
 
   const detail = $("#rdetail");
   const render = (n) => {
@@ -833,14 +1027,14 @@ function selectRound(n, scroll) {
       const name = side === "t" ? r.t_name : r.ct_name;
       if (!e) return [h("div", null, name), h("div", { class: "muted" }, "no economy (round started before the recording)")];
       return [h("div", { class: side }, `${name} (${SIDE_LABEL[side]})`),
-        h("div", null, h("b", { style: `color:${BUY[e.buy][2]}` }, BUY[e.buy][1]), ` · equipment $${e.equipment_value.toLocaleString()} · started with $${e.money_start.toLocaleString()} · spent $${e.cash_spent.toLocaleString()}`)];
+        h("div", null, h("b", null, BUY[e.buy][1]), ` · equipment $${e.equipment_value.toLocaleString()} · started with $${e.money_start.toLocaleString()} · spent $${e.cash_spent.toLocaleString()}`)];
     };
     const clutches = S.clutches.filter((c) => c.round === n);
     const kills = S.kills.filter((k) => k.round === n);
     const dur = r.end_tick != null ? roundTime(r, r.end_tick) : null;
     detail.replaceChildren(
       h("div", null,
-        h("h2", { style: "margin-bottom:8px" }, `Round ${n}`, h("small", null, `${r.winner_name || "?"} wins as ${SIDE_LABEL[sideOf(r.winner)] || "?"}`)),
+        h("h3", null, `Round ${n}`, h("small", null, `${r.winner_name || "?"} wins as ${SIDE_LABEL[sideOf(r.winner)] || "?"}`)),
         h("div", { class: "kv" },
           h("div", null, "How"), h("div", null, label + (dur != null ? ` · ${mmss(dur)} into the round` : "")),
           h("div", null, "Score"), h("div", null, `${r.t_name} ${r.score_t} – ${r.score_ct} ${r.ct_name}`),
@@ -849,7 +1043,7 @@ function selectRound(n, scroll) {
             ? `planted on ${r.bomb_site || "?"} by ${nameOf(r.bomb_planter)} at ${mmss(roundTime(r, r.bomb_plant_tick))}` + (r.bomb_defused ? ", defused" : r.bomb_exploded ? ", exploded" : "")
             : "not planted"),
           h("div", null, "Clutch"), h("div", null, clutches.length ? clutches.map((c) => `${c.name} 1v${c.opponents} (${c.kills} kill${c.kills === 1 ? "" : "s"}, ${c.won ? "won" : "lost"})`).join(" · ") : "none")),
-        h("div", { style: "margin-top:12px" }, h("button", { class: "btn", onclick: () => selectRound(n, true) }, "▶ Watch this round"))),
+        h("div", { style: "margin-top:16px" }, h("button", { class: "btn primary", style: "padding:7px 16px;font-size:13px", onclick: () => selectRound(n, true) }, "▶ Watch in 2D replay"))),
       h("div", null, h("ul", { class: "feed" }, kills.length ? kills.map(killLine) : h("li", { class: "muted" }, "No kills"))));
   };
   roundListeners.push(render);
@@ -894,7 +1088,7 @@ function killLine(k) {
       svgEl("text", { x: L - 6, y: y(v) + 4, "text-anchor": "end" }, v ? `$${v / 1000}k` : "0"));
   }
   rs.forEach((r, i) => {
-    svg.append(svgEl("rect", { x: x(i) - bw / 2 + 1, y: T, width: bw - 2, height: H - T - B, fill: teamColor(r.winner_name), "fill-opacity": 0.09 }));
+    svg.append(svgEl("rect", { x: x(i) - bw / 2 + 1, y: T, width: bw - 2, height: H - T - B, fill: teamColor(r.winner_name), "fill-opacity": 0.05 }));
     svg.append(svgEl("text", { x: x(i), y: H - 10, "text-anchor": "middle" }, r.number));
   });
   for (const team of [TA, TB]) {
@@ -959,19 +1153,31 @@ for (const [k, src] of [["upper", M.radar], ["lower", M.radar_lower]]) {
   images[k] = img;
 }
 const sketches = {};
+// Without a radar image, a floor plan drawn from where players walked: every
+// position becomes a disc the width of a corridor, so their union is the map.
 function sketch() {
   if (sketches[level]) return sketches[level];
   const c = document.createElement("canvas");
   c.width = c.height = 1024;
   const x = c.getContext("2d");
-  x.fillStyle = "rgba(160,172,196,0.05)";
-  for (const f of R.frames) for (const p of f[1]) {
-    if (!(p[8] & 1)) continue;
-    const w = [p[1], p[2], p[3]];
-    if (!onLevel(w)) continue;
-    const [px, py] = toPx(w);
-    x.fillRect(px - 1.5, py - 1.5, 3, 3);
-  }
+  const pts = [];
+  R.frames.forEach((f, i) => {
+    if (i % 2) return;
+    for (const p of f[1]) {
+      if (!(p[8] & 1)) continue;
+      const w = [p[1], p[2], p[3]];
+      if (onLevel(w)) pts.push(toPx(w));
+    }
+  });
+  const rad = Math.max(5, unitsToPx(64));
+  const pass = (color, r) => {
+    x.fillStyle = color;
+    x.beginPath();
+    for (const [px, py] of pts) { x.moveTo(px + r, py); x.arc(px, py, r, 0, Math.PI * 2); }
+    x.fill();
+  };
+  pass(css("--floor-edge"), rad + 2);
+  pass(css("--floor"), rad);
   sketches[level] = c;
   return c;
 }
@@ -988,9 +1194,17 @@ const sites = (() => {
   return Object.entries(acc).map(([s, a]) => ({ site: s, pos: [a[0] / a[3], a[1] / a[3], a[2] / a[3]] }));
 })();
 
+// The map is square and as large as the window allows, with the controls around it still in view.
 function resizeCanvas() {
   const box = $("#canvasbox");
-  const size = Math.max(280, Math.min(box.clientWidth || 860, 860));
+  if (!box || !box.clientWidth) return;
+  // Measured, not guessed: the window minus what is above the map, the controls
+  // under it (score, timeline and round chips in the replay) and the bottom padding.
+  const b = box.getBoundingClientRect();
+  const below = box.parentElement.getBoundingClientRect().bottom - b.bottom;
+  const pad = parseFloat(getComputedStyle(box.closest(".content")).paddingBottom) || 0;
+  const room = innerHeight - (b.top + scrollY) - below - pad - 2;
+  const size = Math.round(Math.max(320, Math.min(box.clientWidth - 2, room, 1100)));
   const dpr = window.devicePixelRatio || 1;
   canvas.style.width = size + "px";
   canvas.style.height = size + "px";
@@ -1030,29 +1244,31 @@ canvas.addEventListener("pointermove", (ev) => {
 });
 canvas.addEventListener("pointerleave", () => { tip.style.display = "none"; });
 
-const view = { mode: "replay", player: "", side: "", kind: "", round: "all", lineup: -1 };
+const view = { mode: "replay", player: "", side: "", kind: "", round: "all", lineup: -1, focus: null, layers: { names: true, util: true, deaths: true } };
+const MAP_BG = css("--map-bg");
 let hoverItems = [];
 
 function begin() {
   const k = kpx();
   g.setTransform(1, 0, 0, 1, 0, 0);
-  g.fillStyle = "#0a0c10";
+  g.fillStyle = MAP_BG;
   g.fillRect(0, 0, canvas.width, canvas.height);
   g.setTransform(k * zoom, 0, 0, k * zoom, panX * k, panY * k);
   const img = images[level];
   if (img && img.complete && img.naturalWidth) g.drawImage(img, 0, 0, 1024, 1024);
   else g.drawImage(sketch(), 0, 0);
-  g.font = `700 ${34 / zoom}px system-ui, sans-serif`;
+  g.font = `600 ${30 / zoom}px Inter, system-ui, sans-serif`;
   g.textAlign = "center";
   g.textBaseline = "middle";
   for (const s of sites) {
     if (!onLevel(s.pos)) continue;
     const [x, y] = toPx(s.pos);
-    g.fillStyle = "rgba(255,255,255,0.18)";
+    g.fillStyle = "rgba(255,255,255,0.16)";
     g.fillText(s.site, x, y);
   }
 }
-const px1 = () => 1 / zoom; // one screen-ish pixel in logical units
+// One screen pixel in the map's 1024-unit space: markers keep their size whatever the size of the map.
+const px1 = () => (window.devicePixelRatio || 1) / (zoom * kpx());
 function circle(x, y, r, fill, stroke, lw) {
   g.beginPath();
   g.arc(x, y, r, 0, Math.PI * 2);
@@ -1088,12 +1304,12 @@ function drawKills() {
     const [vx, vy] = toPx(k.victim_pos);
     if (k.attacker_pos && !k.team_kill) {
       const [ax, ay] = toPx(k.attacker_pos);
-      g.strokeStyle = withAlpha(sideColor(k.attacker_side), 0.55);
+      g.strokeStyle = withAlpha(mapColor(k.attacker_side), 0.55);
       g.lineWidth = 1.6 * px1();
       g.beginPath(); g.moveTo(ax, ay); g.lineTo(vx, vy); g.stroke();
-      circle(ax, ay, 5 * px1(), sideColor(k.attacker_side), "#0008");
+      circle(ax, ay, 5 * px1(), mapColor(k.attacker_side), "#0008");
     }
-    cross(vx, vy, 5 * px1(), sideColor(k.victim_side));
+    cross(vx, vy, 5 * px1(), mapColor(k.victim_side));
     hoverItems.push({ x: vx, y: vy, html: () => `<b>${esc(k.attacker_name || "World")}</b> → <b>${esc(k.victim_name)}</b><br>${esc(wname(k.weapon))}${k.headshot ? " · HS" : ""}${k.wallbang ? " · wallbang" : ""} · round ${k.round} ${k.round_time != null ? "@ " + mmss(k.round_time) : ""}${k.distance ? `<br>${Math.round(k.distance)} units` : ""}${k.attacker_place ? `<br>from ${esc(k.attacker_place)}` : ""}` });
   }
   legend([["Killer (side color)", "dot"], ["Victim", "x"]]);
@@ -1163,14 +1379,14 @@ function drawLineups() {
     g.setLineDash([]);
     if (l.kind === "Smoke" || isFire(l.kind)) circle(lx, ly, landRadius(l.kind), withAlpha(col, 0.16), withAlpha(col, 0.7));
     else circle(lx, ly, 6 * px1(), col);
-    circle(tx, ty, 9 * px1(), withAlpha(sideColor(l.side), 0.95), "#000a");
+    circle(tx, ty, 9 * px1(), withAlpha(mapColor(l.side), 0.95), "#000a");
     g.fillStyle = "#111";
-    g.font = `700 ${11 / zoom}px system-ui`;
+    g.font = `700 ${11 * px1()}px Inter, system-ui, sans-serif`;
     g.fillText(String(l.grenades.length), tx, ty + 0.5 * px1());
     g.globalAlpha = 1;
     hoverItems.push({ x: tx, y: ty, html: () => lineupHtml(l), click: () => { view.lineup = view.lineup === i ? -1 : i; renderSide(); draw(); } });
   });
-  legend([["Throw spot (count)", "dot", css("--t")], ["Landing", "dot", GKIND.Smoke[1]]]);
+  legend([["Throw spot (count)", "dot", MAP_SIDE.t], ["Landing", "dot", GKIND.Smoke[1]]]);
 }
 function lineupRows() {
   return LINEUPS.map((l, i) => ({ l, i })).filter(({ l }) =>
@@ -1299,105 +1515,190 @@ function sideInRound(r, id) {
   const l = r.players.find((x) => x.steam_id === id);
   return l ? l.side : (P.get(id) || {}).team;
 }
+function drawUtility(r, tick) {
+  for (const gr of S.grenades) {
+    if (gr.round !== r.number || tick < gr.throw_tick) continue;
+    const det = gr.detonate_tick ?? Infinity;
+    const [, col] = GKIND[gr.kind] || ["", "#fff"];
+    if (tick < det) {
+      // In flight: the grenade and the last half second of its path.
+      const pts = [];
+      for (let t = Math.max(gr.throw_tick, tick - TR / 2); t <= tick; t += 4) { const p = grenadePos(gr, t); if (p && onLevel(p)) pts.push(toPx(p)); }
+      if (pts.length > 1) {
+        g.strokeStyle = withAlpha(col, 0.45);
+        g.lineWidth = 1.5 * px1();
+        g.beginPath();
+        pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+        g.stroke();
+      }
+      if (pts.length) { const [x, y] = pts[pts.length - 1]; circle(x, y, 3.5 * px1(), col, "#000a"); }
+      continue;
+    }
+    if (!gr.detonate_pos || !onLevel(gr.detonate_pos)) continue;
+    const [x, y] = toPx(gr.detonate_pos);
+    const lasting = gr.kind === "Smoke" || isFire(gr.kind);
+    if (lasting) {
+      const end = gr.end_tick ?? det + (gr.kind === "Smoke" ? 22 * TR : 7 * TR);
+      if (tick > end) continue;
+      const fade = Math.min(1, (end - tick) / TR, (tick - det) / (TR / 3));
+      const rad = landRadius(gr.kind) * (0.7 + 0.3 * Math.min(1, (tick - det) / (TR / 2)));
+      const fill = g.createRadialGradient(x, y, rad * 0.2, x, y, rad);
+      const a = gr.kind === "Smoke" ? 0.5 : 0.32 + 0.05 * Math.sin(tick / 3);
+      fill.addColorStop(0, withAlpha(col, a * fade));
+      fill.addColorStop(1, withAlpha(col, a * 0.55 * fade));
+      circle(x, y, rad, fill);
+      // Time left: an arc that empties as the smoke or fire runs out.
+      g.strokeStyle = withAlpha("#ffffff", 0.75 * fade);
+      g.lineWidth = 2 * px1();
+      g.beginPath();
+      g.arc(x, y, rad + 3 * px1(), -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * Math.max(0, (end - tick) / (end - det)));
+      g.stroke();
+    } else if ((gr.kind === "Flashbang" || gr.kind === "HeGrenade") && tick - det < 0.5 * TR) {
+      const k = (tick - det) / (0.5 * TR);
+      circle(x, y, (6 + 44 * k) * px1(), withAlpha(col, 0.25 * (1 - k)), withAlpha(col, 1 - k), 2.5 * px1());
+    }
+  }
+}
 function drawReplay() {
   hoverItems = [];
   const r = replayRound();
   if (!r) return;
   const tick = replay.tick;
-  // Utility.
-  for (const gr of S.grenades) {
-    if (gr.round !== r.number) continue;
-    const det = gr.detonate_tick ?? Infinity;
-    const [, col] = GKIND[gr.kind] || ["", "#fff"];
-    if (tick >= gr.throw_tick && tick < det) {
-      const p = grenadePos(gr, tick);
-      if (p && onLevel(p)) { const [x, y] = toPx(p); circle(x, y, 4 * px1(), col, "#000a"); }
-    } else if (tick >= det && gr.detonate_pos && onLevel(gr.detonate_pos)) {
-      const [x, y] = toPx(gr.detonate_pos);
-      const end = gr.end_tick ?? det + (gr.kind === "Smoke" ? 22 * TR : isFire(gr.kind) ? 7 * TR : 0);
-      if ((gr.kind === "Smoke" || isFire(gr.kind)) && tick <= end) {
-        const fade = Math.min(1, (end - tick) / TR);
-        circle(x, y, landRadius(gr.kind), withAlpha(col, (gr.kind === "Smoke" ? 0.42 : 0.3) * fade), withAlpha(col, 0.7 * fade));
-      } else if ((gr.kind === "Flashbang" || gr.kind === "HeGrenade") && tick - det < 0.4 * TR) {
-        const k = (tick - det) / (0.4 * TR);
-        circle(x, y, (8 + 40 * k) * px1(), null, withAlpha(col, 1 - k), 3 * px1());
-      }
-    }
-  }
+  if (view.layers.util) drawUtility(r, tick);
   const st = stateAt(r, tick);
-  // Bomb.
+  // Bomb, once dropped or planted.
   if (st.bomb && st.bomb[4] < 0) {
     const bp = [st.bomb[0], st.bomb[1], st.bomb[2]];
     if (onLevel(bp)) {
       const [x, y] = toPx(bp);
-      const pulse = st.bomb[3] ? 0.5 + 0.5 * Math.sin(tick / 6) : 1;
-      g.fillStyle = `rgba(255,60,60,${0.55 + 0.45 * pulse})`;
-      g.fillRect(x - 6 * px1(), y - 6 * px1(), 12 * px1(), 12 * px1());
+      if (st.bomb[3]) {
+        const pulse = 0.5 + 0.5 * Math.sin(tick / 5);
+        circle(x, y, (14 + 8 * pulse) * px1(), null, `rgba(255,70,70,${0.6 - 0.4 * pulse})`, 2 * px1());
+      }
+      g.fillStyle = "#ff4646";
+      g.beginPath(); g.roundRect(x - 6 * px1(), y - 6 * px1(), 12 * px1(), 12 * px1(), 3 * px1()); g.fill();
     }
   }
-  // Deaths so far.
+  // Where players died this round.
   const deaths = S.kills.filter((k) => k.round === r.number && k.tick <= tick && k.victim_pos);
-  for (const k of deaths) if (onLevel(k.victim_pos)) { const [x, y] = toPx(k.victim_pos); cross(x, y, 6 * px1(), withAlpha(sideColor(k.victim_side), 0.8)); }
-  // Players.
-  g.textAlign = "center";
+  if (view.layers.deaths) for (const k of deaths) {
+    if (!onLevel(k.victim_pos)) continue;
+    const [x, y] = toPx(k.victim_pos);
+    cross(x, y, 5 * px1(), withAlpha(mapColor(k.victim_side), 0.75), 2.2 * px1());
+  }
+  // A fresh kill: a line from killer to victim, fading out.
+  for (const k of deaths) {
+    if (tick - k.tick > 1.2 * TR || !k.attacker_pos || !k.victim_pos) continue;
+    const [ax, ay] = toPx(k.attacker_pos), [vx, vy] = toPx(k.victim_pos);
+    g.strokeStyle = `rgba(255,255,255,${0.9 * (1 - (tick - k.tick) / (1.2 * TR))})`;
+    g.lineWidth = 1.8 * px1();
+    g.beginPath(); g.moveTo(ax, ay); g.lineTo(vx, vy); g.stroke();
+  }
+  // Players: view cone, body, name.
+  const labels = [];
   for (const p of st.players) {
     if (!(p[8] & 1)) continue;
     const id = R.players[p[0]];
     const w = [p[1], p[2], p[3]];
     if (!onLevel(w)) continue;
     const [x, y] = toPx(w);
-    const col = sideColor(sideInRound(r, id));
-    const yaw = (p[4] * Math.PI) / 180;
-    g.strokeStyle = withAlpha(col, 0.9);
-    g.lineWidth = 2 * px1();
-    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(yaw) * 26 * px1(), y - Math.sin(yaw) * 26 * px1()); g.stroke();
-    circle(x, y, 9 * px1(), col, "#000c", 1.5 * px1());
-    // health ring
-    g.strokeStyle = "rgba(255,255,255,0.85)";
-    g.lineWidth = 2 * px1();
-    g.beginPath(); g.arc(x, y, 12 * px1(), -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * p[5]) / 100); g.stroke();
-    if (p[8] & 2) { g.fillStyle = "#ff3c3c"; g.fillRect(x + 8 * px1(), y - 14 * px1(), 7 * px1(), 7 * px1()); }
-    g.fillStyle = "#fff";
-    g.font = `600 ${12 / zoom}px system-ui`;
-    g.fillText(nameOf(id), x, y - 20 * px1());
-    hoverItems.push({ x, y, html: () => `<b>${esc(nameOf(id))}</b> · ${p[5]} HP${p[6] ? " · " + p[6] + " armor" : ""}<br>${esc(defName(p[7]))} · $${p[9]}` });
+    const col = mapColor(sideInRound(r, id));
+    const a = (-p[4] * Math.PI) / 180;
+    const cone = g.createRadialGradient(x, y, 0, x, y, 46 * px1());
+    cone.addColorStop(0, withAlpha(col, 0.38));
+    cone.addColorStop(1, withAlpha(col, 0));
+    g.fillStyle = cone;
+    g.beginPath(); g.moveTo(x, y); g.arc(x, y, 46 * px1(), a - 0.42, a + 0.42); g.closePath(); g.fill();
+    if (view.focus === id) circle(x, y, 13 * px1(), null, "#ffffff", 2 * px1());
+    circle(x, y, 7.5 * px1(), col, MAP_BG, 2.2 * px1());
+    // Health: the body's inner disc shrinks as health goes down.
+    if (p[5] < 100) circle(x, y, 7.5 * px1() * (1 - p[5] / 100), withAlpha(MAP_BG, 0.85));
+    if (p[8] & 2) { g.fillStyle = "#ff4646"; g.beginPath(); g.roundRect(x + 6 * px1(), y - 12 * px1(), 7 * px1(), 7 * px1(), 1.5 * px1()); g.fill(); }
+    labels.push([x, y, nameOf(id), view.focus === id]);
+    hoverItems.push({ x, y, html: () => `<b>${esc(nameOf(id))}</b> · ${p[5]} HP${p[6] ? " · " + p[6] + " armor" : ""}<br>${esc(defName(p[7]))} · $${p[9]}`, click: () => focusPlayer(id) });
   }
-  // Fresh kills: a line from killer to victim.
-  for (const k of deaths) {
-    if (tick - k.tick > 1.2 * TR || !k.attacker_pos || !k.victim_pos) continue;
-    const [ax, ay] = toPx(k.attacker_pos), [vx, vy] = toPx(k.victim_pos);
-    g.strokeStyle = `rgba(255,255,255,${1 - (tick - k.tick) / (1.2 * TR)})`;
-    g.lineWidth = 2 * px1();
-    g.beginPath(); g.moveTo(ax, ay); g.lineTo(vx, vy); g.stroke();
+  if (view.layers.names) {
+    g.font = `600 ${11 * px1()}px Inter, system-ui, sans-serif`;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    for (const [x, y, name, on] of labels) {
+      const wd = g.measureText(name).width + 10 * px1(), ht = 15 * px1(), ly = y + 18 * px1();
+      g.fillStyle = on ? "rgba(255,255,255,0.92)" : "rgba(10,10,10,0.72)";
+      g.beginPath(); g.roundRect(x - wd / 2, ly - ht / 2, wd, ht, 5 * px1()); g.fill();
+      g.fillStyle = on ? "#0a0a0a" : "#ededed";
+      g.fillText(name, x, ly + 0.5 * px1());
+    }
   }
   updateHud(r, st);
+  updateFeed(r);
+  updateScore(r);
 }
+function focusPlayer(id) { view.focus = view.focus === id ? null : id; hudKey = ""; draw(); }
 
+// The teams beside the map, as on a broadcast: health, weapon, money, kills this round.
 let hudKey = "";
 function updateHud(r, st) {
-  const box = $("#hud");
-  if (!box) return;
-  const key = r.number + ":" + st.frame + ":" + S.kills.filter((k) => k.round === r.number && k.tick <= replay.tick).length;
+  const killsSoFar = S.kills.filter((k) => k.round === r.number && k.tick <= replay.tick);
+  const key = r.number + ":" + st.frame + ":" + killsSoFar.length + ":" + view.focus;
   if (key === hudKey) return;
   hudKey = key;
   const byIdx = new Map(st.players.map((p) => [p[0], p]));
-  const col = (team) => {
-    const ids = S.players.filter((p) => p.team_name === team.name).map((p) => p.steam_id);
-    return h("div", { class: "hud" }, h("div", { class: "teamhead" }, h("span", { class: "dot", style: `background:${teamColor(team.name)}` }), team.name,
-      h("span", { class: sideOf(r.t_name === team.name ? "Terrorist" : "CounterTerrorist") }, SIDE_LABEL[sideOf(r.t_name === team.name ? "Terrorist" : "CounterTerrorist")])),
-    ids.map((id) => {
-      const i = R.players.indexOf(id), p = byIdx.get(i);
-      const alive = p && p[8] & 1, hp = p ? p[5] : 0;
-      const kills = S.kills.filter((k) => k.round === r.number && k.tick <= replay.tick && k.attacker === id && !k.team_kill).length;
-      return h("div", { class: "hudrow" + (alive ? "" : " dead") },
-        h("span", { class: "nm" }, nameOf(id), kills ? h("span", { class: "muted" }, ` · ${kills}K`) : null, p && p[8] & 2 ? h("span", { class: "tag", style: "margin-left:6px" }, "C4") : null, p && p[8] & 4 ? h("span", { class: "tag", style: "margin-left:6px" }, "kit") : null),
-        h("span", { class: "wp" }, alive ? `${defName(p[7])} · $${p[9]}` : "dead"),
-        h("div", { class: "hp" }, h("i", { style: `width:${alive ? hp : 0}%;background:${hp > 50 ? css("--good") : hp > 20 ? css("--warn") : css("--bad")}` })));
-    }));
+  const column = (team) => {
+    const side = r.t_name === team.name ? "t" : "ct";
+    let alive = 0;
+    const cards = playersOf(team).map((pl) => {
+      const id = pl.steam_id, p = byIdx.get(R.players.indexOf(id));
+      const on = !!(p && p[8] & 1), hp = on ? p[5] : 0;
+      if (on) alive++;
+      const kills = killsSoFar.filter((k) => k.attacker === id && !k.team_kill).length;
+      return h("div", { class: "pcard" + (on ? "" : " dead") + (view.focus === id ? " focus" : ""), onclick: () => focusPlayer(id) },
+        h("span", { class: "nm" }, nameOf(id)), h("span", { class: "hpn" }, on ? hp : ""),
+        h("div", { class: "hp" }, h("i", { style: `width:${hp}%;background:${hp > 50 ? css("--text") : hp > 20 ? css("--warn") : css("--bad")}` })),
+        h("div", { class: "meta" },
+          h("span", null, on ? h("b", null, defName(p[7])) : "dead", kills ? ` · ${kills}K` : ""),
+          h("span", { class: "icons" }, on && p[8] & 2 ? h("span", { class: "tag" }, "C4") : null, on && p[8] & 4 ? h("span", { class: "tag" }, "kit") : null, on ? `$${p[9]}` : "")));
+    });
+    return [h("div", { class: "hudhead" }, h("span", { class: "dot", style: `background:${teamColor(team.name)}` }), team.name,
+      h("span", { class: "sidetag " + side }, SIDE_LABEL[side]), h("span", { class: "alive" }, `${alive} alive`)), ...cards];
   };
-  const feed = S.kills.filter((k) => k.round === r.number && k.tick <= replay.tick).slice(-6);
-  box.replaceChildren(col(TA), col(TB),
-    h("div", null, h("div", { class: "muted", style: "font-size:12px;margin:4px 0" }, "Kills"), h("ul", { class: "feed" }, feed.length ? feed.map(killLine) : h("li", { class: "muted" }, "—"))));
+  $("#hudA").replaceChildren(...column(TA));
+  $("#mapside").replaceChildren(h("div", { class: "hudcol" }, ...column(TB)));
+}
+// The kill feed in the corner of the map: the last kills, gone after a few seconds.
+function updateFeed(r) {
+  const box = $("#killfeed");
+  const ks = r && view.mode === "replay" ? S.kills.filter((k) => k.round === r.number && k.tick <= replay.tick && replay.tick - k.tick < 6 * TR).slice(-5) : [];
+  const key = ks.map((k) => k.tick + k.victim_name).join(",");
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.replaceChildren(...ks.map((k) => h("div", { class: "kf" },
+    h("b", { class: sideOf(k.attacker_side) }, k.attacker_name || "World"), h("span", { class: "wp" }, wname(k.weapon)),
+    k.headshot ? h("span", { class: "hs" }, "HS") : null, k.wallbang ? h("span", { class: "hs" }, "WB") : null,
+    h("b", { class: sideOf(k.victim_side) }, k.victim_name))));
+}
+// Score and clock above the map.
+function updateScore(r) {
+  const box = $("#rpscore");
+  if (!box.firstChild || box.dataset.round !== String(r.number)) {
+    box.dataset.round = r.number;
+    const won = (t) => S.rounds.filter((x) => x.number < r.number && x.winner_name === t.name).length;
+    const tag = (t) => { const s = r.t_name === t.name ? "t" : "ct"; return h("span", { class: "sidetag " + s }, SIDE_LABEL[s]); };
+    replay.scoreEls = [h("span", { class: "sc" }, won(TA)), h("span", { class: "sc" }, won(TB))];
+    replay.clockEl = h("div", { class: "clk" });
+    replay.scoreBase = [won(TA), won(TB)];
+    box.replaceChildren(
+      h("div", { class: "sd" }, h("span", { class: "dot", style: `background:${teamColor(TA.name)}` }), h("span", { class: "tn" }, TA.name), tag(TA), replay.scoreEls[0]),
+      h("div", { class: "mid" }, h("div", { class: "rn" }, `Round ${r.number} of ${S.rounds.length}`), replay.clockEl),
+      h("div", { class: "sd b" }, replay.scoreEls[1], tag(TB), h("span", { class: "tn" }, TB.name), h("span", { class: "dot", style: `background:${teamColor(TB.name)}` })));
+  }
+  const over = r.end_tick != null && replay.tick >= r.end_tick;
+  replay.scoreEls[0].textContent = replay.scoreBase[0] + (over && r.winner_name === TA.name ? 1 : 0);
+  replay.scoreEls[1].textContent = replay.scoreBase[1] + (over && r.winner_name === TB.name ? 1 : 0);
+  const planted = r.bomb_plant_tick != null && replay.tick >= r.bomb_plant_tick && !over;
+  replay.clockEl.classList.toggle("bomb", planted);
+  replay.clockEl.textContent = replay.tick < (r.freeze_end_tick ?? -Infinity) ? "Freeze time"
+    : planted ? "Bomb " + mmss(40 - (replay.tick - r.bomb_plant_tick) / TR)
+    : over ? "Round over" : mmss(Math.max(0, 115 - roundTime(r, replay.tick)));
 }
 
 /* ---------- map toolbar, side panel, timeline ---------- */
@@ -1407,62 +1708,87 @@ function legend(items) {
   box.replaceChildren(...items.map(([label, shape, color]) => h("span", null,
     shape === "dot" ? h("i", { class: "dot", style: `background:${color || css("--t")}` }) : shape === "x" ? h("b", null, "✕") : null, label)));
 }
-const MODES = [["replay", "Replay"], ["kills", "Kills"], ["grenades", "Grenades"], ["lineups", "Lineups"], ["heatmap", "Positions"]];
+const MODES = [["replay", "Replay"], ["kills", "Kills"], ["grenades", "Grenades"], ["lineups", "Lineups"], ["heatmap", "Heatmap"]];
+function setMode(k) { view.mode = k; view.lineup = -1; renderTools(); renderSide(); resizeCanvas(); }
 function renderTools() {
   const tools = $("#maptools");
   const opt = (v, l, sel) => h("option", { value: v, selected: sel ? true : null }, l);
-  const modeSeg = h("div", { class: "seg" }, MODES.map(([k, l]) => h("button", { class: view.mode === k ? "on" : null, onclick: () => { view.mode = k; view.lineup = -1; renderTools(); renderSide(); draw(); } }, l)));
-  const roundSel = h("select", { "aria-label": "Round", onchange: (e) => { if (view.mode === "replay") selectRound(Number(e.target.value)); else { view.round = e.target.value; draw(); } } },
-    view.mode === "replay" ? null : opt("all", "All rounds", view.round === "all"),
-    S.rounds.map((r) => opt(r.number, `Round ${r.number}`, view.mode === "replay" ? r.number === selectedRound : String(r.number) === String(view.round))));
-  const playerSel = h("select", { "aria-label": "Player", onchange: (e) => { view.player = e.target.value; renderSide(); draw(); } },
-    opt("", "All players", !view.player), [TA, TB].map((t) => h("optgroup", { label: t.name }, playersOf(t).map((p) => opt(p.steam_id, p.name, view.player === p.steam_id)))));
-  const sideSel = h("select", { "aria-label": "Side", onchange: (e) => { view.side = e.target.value; renderSide(); draw(); } },
-    opt("", "Both sides", !view.side), opt("t", "T side", view.side === "t"), opt("ct", "CT side", view.side === "ct"));
-  const kindSel = h("select", { "aria-label": "Grenade", onchange: (e) => { view.kind = e.target.value; renderSide(); draw(); } },
-    opt("", "All grenades", !view.kind), ["Smoke", "Flashbang", "HeGrenade", "Fire", "Decoy"].map((k) => opt(k, k === "Fire" ? "Molotov / incendiary" : GKIND[k][0], view.kind === k)));
-  const levelSeg = hasLower ? h("div", { class: "seg" }, [["upper", "Upper"], ["lower", "Lower"]].map(([k, l]) => h("button", { class: level === k ? "on" : null, onclick: () => { level = k; renderTools(); draw(); } }, l))) : null;
-  const parts = [modeSeg, roundSel, view.mode === "replay" ? null : playerSel, view.mode === "replay" ? null : sideSel,
-    view.mode === "grenades" || view.mode === "lineups" ? kindSel : null, levelSeg];
-  tools.replaceChildren(...parts.filter(Boolean));
-  $("#mapnote").textContent = OV ? (M.radar ? "" : "map sketched from player positions; drop the map's radar image on the page to draw it") : "no radar calibration for this map: positions are fitted to the view";
+  const modeSeg = h("div", { class: "seg" }, MODES.map(([k, l]) => h("button", { class: view.mode === k ? "on" : null, onclick: () => setMode(k) }, l)));
+  const parts = [modeSeg];
+  if (view.mode === "replay") {
+    parts.push(h("div", { class: "seg", title: "Layers on the map" }, [["names", "Names"], ["util", "Utility"], ["deaths", "Deaths"]].map(([k, l]) =>
+      h("button", { class: view.layers[k] ? "on" : null, onclick: () => { view.layers[k] = !view.layers[k]; renderTools(); draw(); } }, l))));
+  } else {
+    parts.push(h("select", { "aria-label": "Round", onchange: (e) => { view.round = e.target.value; renderSide(); draw(); } },
+      opt("all", "All rounds", view.round === "all"), S.rounds.map((r) => opt(r.number, `Round ${r.number}`, String(r.number) === String(view.round)))));
+    parts.push(h("select", { "aria-label": "Player", onchange: (e) => { view.player = e.target.value; renderSide(); draw(); } },
+      opt("", "All players", !view.player), [TA, TB].map((t) => h("optgroup", { label: t.name }, playersOf(t).map((p) => opt(p.steam_id, p.name, view.player === p.steam_id))))));
+    parts.push(h("select", { "aria-label": "Side", onchange: (e) => { view.side = e.target.value; renderSide(); draw(); } },
+      opt("", "Both sides", !view.side), opt("t", "T side", view.side === "t"), opt("ct", "CT side", view.side === "ct")));
+    if (view.mode === "grenades" || view.mode === "lineups") parts.push(h("select", { "aria-label": "Grenade", onchange: (e) => { view.kind = e.target.value; renderSide(); draw(); } },
+      opt("", "All grenades", !view.kind), ["Smoke", "Flashbang", "HeGrenade", "Fire", "Decoy"].map((k) => opt(k, k === "Fire" ? "Molotov / incendiary" : GKIND[k][0], view.kind === k))));
+  }
+  if (hasLower) parts.push(h("div", { class: "seg" }, [["upper", "Upper"], ["lower", "Lower"]].map(([k, l]) => h("button", { class: level === k ? "on" : null, onclick: () => { level = k; renderTools(); draw(); } }, l))));
+  parts.push(h("span", { class: "grow" }));
+  const note = OV ? (M.radar ? "" : "Drop the map's radar image on the page to draw it under the positions") : "No radar calibration for this map: positions are fitted to the view";
+  if (note) parts.push(h("span", { class: "muted", style: "font-size:12px" }, note));
+  tools.replaceChildren(...parts);
+}
+function roundChips(box, selected, onPick) {
+  let prev = null;
+  box.replaceChildren();
+  for (const r of S.rounds) {
+    const sideA = r.t_name === TA.name ? "t" : "ct";
+    if (prev && prev !== sideA) box.append(h("span", { class: "gap", title: "Sides switch" }));
+    prev = sideA;
+    box.append(h("button", { class: "rchip" + (r.number === selected ? " on" : ""), type: "button", title: `Round ${r.number}: ${r.winner_name || "?"} · ${how(r)[0]}`, onclick: () => onPick(r.number) },
+      r.number, h("i", { style: `background:${teamColor(r.winner_name)}` })));
+  }
 }
 function renderSide() {
-  const side = $("#mapside");
-  const tl = $("#timeline");
+  const rp = $("#rp"), side = $("#mapside"), tl = $("#timeline");
+  rp.classList.toggle("analysis", view.mode !== "replay");
+  $("#rpscore").hidden = $("#rprounds").hidden = tl.hidden = view.mode !== "replay";
+  $("#maphint").hidden = view.mode === "replay";
   tl.replaceChildren();
-  if (view.mode === "replay") {
-    side.replaceChildren(h("div", { class: "card" }, h("div", { id: "hud" })), h("div", { class: "legend", id: "legend" }));
-    hudKey = "";
-    const r = replayRound();
-    if (!r) return;
-    const [t0, t1] = replayBounds(r);
-    if (replay.tick < t0 || replay.tick > t1) replay.tick = r.freeze_end_tick ?? t0;
-    const range = h("input", { type: "range", min: t0, max: t1, step: 1, value: replay.tick, "aria-label": "Time in round",
-      oninput: (e) => { replay.tick = Number(e.target.value); draw(); } });
-    const clock = h("span", { class: "clock" });
-    const play = h("button", { class: "btn", onclick: () => { replay.playing = !replay.playing; if (replay.playing && replay.tick >= t1) replay.tick = t0; play.textContent = replay.playing ? "⏸ Pause" : "▶ Play"; replay.last = performance.now(); if (replay.playing) requestAnimationFrame(loop); } }, replay.playing ? "⏸ Pause" : "▶ Play");
-    const idx = S.rounds.indexOf(r);
-    const prev = h("button", { class: "btn", disabled: idx <= 0 ? true : null, onclick: () => selectRound(S.rounds[idx - 1].number) }, "⏮");
-    const next = h("button", { class: "btn", disabled: idx >= S.rounds.length - 1 ? true : null, onclick: () => selectRound(S.rounds[idx + 1].number) }, "⏭");
-    const speed = h("select", { "aria-label": "Speed", onchange: (e) => { replay.speed = Number(e.target.value); } },
-      [0.5, 1, 2, 4, 8].map((s) => h("option", { value: s, selected: s === replay.speed ? true : null }, s + "×")));
-    tl.append(prev, play, next, range, clock, speed);
-    replay.range = range;
-    replay.clock = clock;
-    replay.bounds = [t0, t1];
-    replay.playBtn = play;
-    legend([["T", "dot", css("--t")], ["CT", "dot", css("--ct")], ["Bomb", "dot", "#ff3c3c"], ["Smoke", "dot", GKIND.Smoke[1]], ["Fire", "dot", GKIND.Molotov[1]], ["Death", "x"]]);
-  } else if (view.mode === "lineups") {
-    const rows = lineupRows();
-    side.replaceChildren(h("div", { class: "card" }, h("div", { class: "muted", style: "font-size:12px;margin-bottom:6px" }, `${rows.length} lineups thrown more than once`),
-      h("div", { class: "list" }, rows.length ? rows.map(({ l, i }) => h("div", { class: "item" + (view.lineup === i ? " on" : ""), onclick: () => { view.lineup = view.lineup === i ? -1 : i; renderSide(); draw(); } },
-        h("div", null, h("i", { class: "dot", style: `background:${GKIND[l.kind][1]};margin-right:6px` }), h("b", null, `${GKIND[l.kind][0]} ×${l.grenades.length}`), " ", h("span", { class: sideOf(l.side) }, SIDE_LABEL[sideOf(l.side)])),
-        h("div", { class: "muted", style: "font-size:12px" }, `${l.throw_place ? "from " + l.throw_place + " · " : ""}${l.throwers.map(nameOf).join(", ")}${l.jump_throw ? " · jump throw" : ""}`))) : h("div", { class: "empty" }, "None with these filters"))),
-      h("div", { class: "legend", id: "legend" }));
-  } else {
-    side.replaceChildren(h("div", { class: "card" }, summaryFor(view.mode)), h("div", { class: "legend", id: "legend" }));
+  if (view.mode !== "replay") {
+    updateFeed(null);
+    if (view.mode === "lineups") {
+      const rows = lineupRows();
+      side.replaceChildren(h("div", { class: "card" }, h("div", { class: "muted", style: "font-size:12px;margin-bottom:6px" }, `${rows.length} lineups thrown more than once`),
+        h("div", { class: "list" }, rows.length ? rows.map(({ l, i }) => h("div", { class: "item" + (view.lineup === i ? " on" : ""), onclick: () => { view.lineup = view.lineup === i ? -1 : i; renderSide(); draw(); } },
+          h("div", null, h("i", { class: "dot", style: `background:${GKIND[l.kind][1]};margin-right:6px` }), h("b", null, `${GKIND[l.kind][0]} ×${l.grenades.length}`), " ", h("span", { class: sideOf(l.side) }, SIDE_LABEL[sideOf(l.side)])),
+          h("div", { class: "muted", style: "font-size:12px" }, `${l.throw_place ? "from " + l.throw_place + " · " : ""}${l.throwers.map(nameOf).join(", ")}${l.jump_throw ? " · jump throw" : ""}`))) : h("div", { class: "empty" }, "None with these filters"))),
+        h("div", { class: "legend", id: "legend" }));
+    } else {
+      side.replaceChildren(h("div", { class: "card" }, summaryFor(view.mode)), h("div", { class: "legend", id: "legend" }));
+    }
+    return;
   }
+  hudKey = "";
+  $("#rpscore").dataset.round = "";
+  const r = replayRound();
+  if (!r) return;
+  roundChips($("#rprounds"), r.number, (n) => selectRound(n));
+  const [t0, t1] = replayBounds(r);
+  if (replay.tick < t0 || replay.tick > t1) replay.tick = r.freeze_end_tick ?? t0;
+  const at = (tick) => `${(100 * (tick - t0)) / Math.max(1, t1 - t0)}%`;
+  const seek = (tick) => { replay.tick = Math.max(t0, Math.min(t1, tick)); draw(); };
+  // Events on the timeline: kills in the killer's side color, the bomb plant as a red diamond.
+  const marks = h("div", { class: "marks" },
+    S.kills.filter((k) => k.round === r.number && k.tick >= t0 && k.tick <= t1).map((k) =>
+      h("span", { class: "mk", style: `left:${at(k.tick)};background:${sideColor(k.attacker_side || k.victim_side)}`, title: `${mmss(k.round_time)} ${k.attacker_name || "World"} ✕ ${k.victim_name}`, onclick: () => seek(k.tick - 2 * TR) })),
+    r.bomb_plant_tick != null && r.bomb_plant_tick <= t1 ? h("span", { class: "mk bomb", style: `left:${at(r.bomb_plant_tick)}`, title: `Bomb planted on ${r.bomb_site || "?"}`, onclick: () => seek(r.bomb_plant_tick - 2 * TR) }) : null);
+  const range = h("input", { type: "range", min: t0, max: t1, step: 1, value: replay.tick, "aria-label": "Time in round", oninput: (e) => seek(Number(e.target.value)) });
+  const play = h("button", { class: "btn", style: "min-width:84px", onclick: () => { replay.playing = !replay.playing; if (replay.playing && replay.tick >= t1) replay.tick = t0; play.textContent = replay.playing ? "❚❚ Pause" : "▶ Play"; replay.last = performance.now(); if (replay.playing) requestAnimationFrame(loop); } }, replay.playing ? "❚❚ Pause" : "▶ Play");
+  const idx = S.rounds.indexOf(r);
+  const prev = h("button", { class: "btn icon", title: "Previous round", disabled: idx <= 0 ? true : null, onclick: () => selectRound(S.rounds[idx - 1].number) }, "⏮");
+  const next = h("button", { class: "btn icon", title: "Next round", disabled: idx >= S.rounds.length - 1 ? true : null, onclick: () => selectRound(S.rounds[idx + 1].number) }, "⏭");
+  const clock = h("span", { class: "clockmini" });
+  const speed = h("select", { "aria-label": "Speed", onchange: (e) => { replay.speed = Number(e.target.value); } },
+    [0.5, 1, 2, 4, 8].map((s) => h("option", { value: s, selected: s === replay.speed ? true : null }, s + "×")));
+  tl.append(prev, play, next, h("div", { class: "scrub" }, marks, range), clock, speed);
+  Object.assign(replay, { range, clock, bounds: [t0, t1], playBtn: play });
 }
 function summaryFor(mode) {
   if (mode === "kills") {
@@ -1501,16 +1827,17 @@ function draw() {
   else if (view.mode === "lineups") drawLineups();
   else drawHeatmap();
   if (view.mode === "replay" && replay.range) {
+    const [t0, t1] = replay.bounds;
     replay.range.value = Math.round(replay.tick);
+    replay.range.style.setProperty("--p", `${(100 * (replay.tick - t0)) / Math.max(1, t1 - t0)}%`);
     const r = replayRound();
-    const bomb = r && r.bomb_plant_tick != null && replay.tick >= r.bomb_plant_tick ? ` · bomb ${mmss(40 - (replay.tick - r.bomb_plant_tick) / TR)}` : "";
-    replay.clock.textContent = r ? (replay.tick < (r.freeze_end_tick ?? -Infinity) ? "freeze time" : mmss(roundTime(r, replay.tick))) + bomb : "";
+    replay.clock.textContent = r ? `${mmss(Math.max(0, roundTime(r, replay.tick)))} / ${mmss(roundTime(r, t1))}` : "";
   }
 }
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
 function hover(ev) {
   const [lx, ly] = screenToLogical(ev);
-  let best = null, bd = (12 / zoom) ** 2;
+  let best = null, bd = (14 * px1()) ** 2;
   for (const it of hoverItems) { const d = (it.x - lx) ** 2 + (it.y - ly) ** 2; if (d < bd) { bd = d; best = it; } }
   if (!best) { tip.style.display = "none"; canvas.onclick = null; return; }
   tip.innerHTML = best.html();
@@ -1536,38 +1863,44 @@ roundListeners.push((n) => {
     const dmg = (f) => mine.filter((gr) => f(gr.kind)).reduce((a, gr) => a + gr.enemy_damage, 0);
     return { p, he: dmg((k) => k === "HeGrenade"), fire: dmg(isFire) };
   });
-  $("#utiltable").append(table([
+  const cols = [
     { key: "name", label: "Player", value: (x) => x.p.name, show: (x) => nameCell(x.p) },
     { key: "fl", label: "Flashes", value: (x) => x.p.flashbangs_thrown },
     { key: "ef", label: "Enemies blinded", value: (x) => x.p.enemies_flashed },
-    { key: "bt", label: "Blind s / flash", title: "Enemy blind time per flashbang thrown", value: (x) => ratio(x.p.enemy_flash_duration, x.p.flashbangs_thrown), show: (x) => ratio(x.p.enemy_flash_duration, x.p.flashbangs_thrown).toFixed(2) },
+    { extra: true, key: "bt", label: "Blind s / flash", title: "Enemy blind time per flashbang thrown", value: (x) => ratio(x.p.enemy_flash_duration, x.p.flashbangs_thrown), show: (x) => ratio(x.p.enemy_flash_duration, x.p.flashbangs_thrown).toFixed(2) },
     { key: "fa", label: "Flash assists", value: (x) => x.p.flash_assists },
-    { key: "fk", label: "Flash → kill", title: "Flashes that blinded an enemy killed by the team while blind", value: (x) => x.p.flashes_leading_to_kill },
-    { key: "tf", label: "Team flashed", value: (x) => x.p.teammates_flashed, cls: (x) => (x.p.teammates_flashed > x.p.enemies_flashed ? "bad" : null) },
+    { extra: true, key: "fk", label: "Flash → kill", title: "Flashes that blinded an enemy killed by the team while blind", value: (x) => x.p.flashes_leading_to_kill },
+    { extra: true, key: "tf", label: "Team flashed", value: (x) => x.p.teammates_flashed, cls: (x) => (x.p.teammates_flashed > x.p.enemies_flashed ? "bad" : null) },
     { key: "sm", label: "Smokes", value: (x) => x.p.smokes_thrown },
-    { key: "he", label: "HE (dmg)", value: (x) => x.he, show: (x) => `${x.p.he_thrown} (${x.he})` },
-    { key: "mo", label: "Molotovs (dmg)", value: (x) => x.fire, show: (x) => `${x.p.molotovs_thrown} (${x.fire})` },
+    { extra: true, key: "he", label: "HE (dmg)", value: (x) => x.he, show: (x) => `${x.p.he_thrown} (${x.he})` },
+    { extra: true, key: "mo", label: "Molotovs (dmg)", value: (x) => x.fire, show: (x) => `${x.p.molotovs_thrown} (${x.fire})` },
     { key: "ud", label: "Utility dmg", value: (x) => x.p.utility_damage },
-    { key: "uu", label: "Unused $", title: "Value of grenades still carried at death", value: (x) => x.p.utility_unused_value, show: (x) => "$" + x.p.utility_unused_value.toLocaleString() },
-  ], rows, "ud"));
+    { extra: true, key: "uu", label: "Unused $", title: "Value of grenades still carried at death", value: (x) => x.p.utility_unused_value, show: (x) => "$" + x.p.utility_unused_value.toLocaleString() },
+  ];
+  const render = () => $("#utiltable").replaceChildren(table(visible(cols, "utility"), rows, "ud"));
+  detailSwitch("utility", render);
+  render();
 })();
 
 /* ---------- aim ---------- */
 (function aim() {
   const rows = S.players.filter((p) => p.aim && p.aim.shots > 0).map((p) => ({ p, a: p.aim }));
-  if (!rows.length) { $("#aimtable").append(h("div", { class: "empty" }, "No shots recorded")); return; }
-  $("#aimtable").append(table([
+  if (!rows.length) { $("#aimtable").append(h("div", { class: "empty" }, "No shots recorded")); $("[data-detail=aim]").hidden = true; return; }
+  const cols = [
     { key: "name", label: "Player", value: (x) => x.p.name, show: (x) => nameCell(x.p) },
     { key: "sh", label: "Shots", value: (x) => x.a.shots },
     { key: "acc", label: "Accuracy", title: "Shots that hit an enemy", value: (x) => ratio(x.a.hits, x.a.shots), show: (x) => pct(x.a.hits, x.a.shots) },
     { key: "hh", label: "Head hits", title: "Share of hits on the head", value: (x) => ratio(x.a.head_hits, x.a.hits), show: (x) => pct(x.a.head_hits, x.a.hits) },
     { key: "fs", label: "First shot", title: "Engagements whose first shot hit", value: (x) => ratio(x.a.first_shot_hits, x.a.engagements), show: (x) => pct(x.a.first_shot_hits, x.a.engagements) },
-    { key: "st", label: "Stopped", title: "Rifle, sniper and pistol shots fired slow enough to be accurate (counter-strafing)", value: (x) => ratio(x.a.accurate_speed_shots, x.a.speed_checked_shots), show: (x) => pct(x.a.accurate_speed_shots, x.a.speed_checked_shots) },
-    { key: "cp", label: "Crosshair", title: "Median angle between crosshair and enemy head 0.2 s before an engagement's first shot (lower is better)", value: (x) => -(median(x.a.crosshair_offsets) ?? 99), show: (x) => { const m = median(x.a.crosshair_offsets); return m == null ? "–" : m.toFixed(1) + "°"; } },
+    { extra: true, key: "st", label: "Stopped", title: "Rifle, sniper and pistol shots fired slow enough to be accurate (counter-strafing)", value: (x) => ratio(x.a.accurate_speed_shots, x.a.speed_checked_shots), show: (x) => pct(x.a.accurate_speed_shots, x.a.speed_checked_shots) },
+    { extra: true, key: "cp", label: "Crosshair", title: "Median angle between crosshair and enemy head 0.2 s before an engagement's first shot (lower is better)", value: (x) => -(median(x.a.crosshair_offsets) ?? 99), show: (x) => { const m = median(x.a.crosshair_offsets); return m == null ? "–" : m.toFixed(1) + "°"; } },
     { key: "ttk", label: "Time to kill", title: "Median seconds from first shot to kill", value: (x) => -(median(x.a.kill_times) ?? 99), show: (x) => { const m = median(x.a.kill_times); return m == null ? "–" : m.toFixed(2) + " s"; } },
-    { key: "en", label: "Engagements", title: "Engagements won (killed the enemy) / opened", value: (x) => ratio(x.a.engagement_kills, x.a.engagements), show: (x) => `${x.a.engagement_kills}/${x.a.engagements}` },
-    { key: "wp", label: "Main weapons", sort: false, align: "left", value: () => 0, show: (x) => x.a.weapons.filter((w) => w.kills > 0 || w.shots >= 20).slice(0, 3).map((w) => `${wname(w.weapon)} ${w.kills}K ${pct(w.hits, w.shots)}`).join(" · ") },
-  ], rows, "acc"));
+    { extra: true, key: "en", label: "Engagements", title: "Engagements won (killed the enemy) / opened", value: (x) => ratio(x.a.engagement_kills, x.a.engagements), show: (x) => `${x.a.engagement_kills}/${x.a.engagements}` },
+    { extra: true, key: "wp", label: "Main weapons", sort: false, align: "left", value: () => 0, show: (x) => x.a.weapons.filter((w) => w.kills > 0 || w.shots >= 20).slice(0, 3).map((w) => `${wname(w.weapon)} ${w.kills}K ${pct(w.hits, w.shots)}`).join(" · ") },
+  ];
+  const render = () => $("#aimtable").replaceChildren(table(visible(cols, "aim"), rows, "acc"));
+  detailSwitch("aim", render);
+  render();
 })();
 
 /* ---------- clutches ---------- */
@@ -1584,28 +1917,35 @@ roundListeners.push((n) => {
   ], cs, "r", false));
 })();
 
-/* ---------- footer ---------- */
-$("#foot").append(
+/* ---------- notes ---------- */
+$("#notes").append(
   h("p", null, `Generated by ${M.generator} from ${M.file || "a demo"} in ${(M.parse_seconds || 0).toFixed(1)} s.`),
   h("p", null, "Economy is read when freeze time ends: buy types use the team's average equipment value per player (eco under $1,000, semi-eco under $2,000, force under $4,000, else full buy); pistol rounds are rounds where every player started with $1,000 or less."),
   h("p", null, "A clutch starts when a player is the last alive on their side with at least one enemy alive. Aim numbers come from every shot: a hit is damage dealt in the tick of the shot; an engagement opens with the first shot at an enemy after 2 s without shooting at them."),
   h("p", null, "Rating 1.0 is HLTV's published formula; Impact and Rating 2.0 are community approximations."));
 
+/* ---------- overview: round history ---------- */
+roundChips($("#ovrounds"), null, (n) => selectRound(n, true));
+$("#ovlegend").append(h("span", null, teamDot(TA), TA.name, " won"), h("span", null, teamDot(TB), TB.name, " won"), h("span", null, "the gap marks the side switch"));
+
 /* ---------- start ---------- */
 renderTools();
 renderSide();
 window.addEventListener("resize", resizeCanvas, { signal });
-resizeCanvas();
-// Links like #map-kills open a view of the map.
+// Links like #map-kills open a view of the map; #round-5 opens round 5 in the
+// replay and #round-5-40 starts it 40 s after freeze time.
 const linked = MODES.find(([k]) => location.hash === "#map-" + k);
-if (linked) { view.mode = linked[0]; renderTools(); renderSide(); draw(); document.getElementById("map").scrollIntoView(); }
-// #round-5 opens round 5 in the replay; #round-5-40 starts 40 s after freeze time.
-const moment = location.hash.match(/^#round-(\d+)(?:-(\d+(?:\.\d+)?))?$/);
-if (moment && roundByNumber.has(Number(moment[1]))) {
+function openMoment() {
+  const moment = location.hash.match(/^#round-(\d+)(?:-(\d+(?:\.\d+)?))?$/);
+  if (!moment || !roundByNumber.has(Number(moment[1]))) return;
   const r = roundByNumber.get(Number(moment[1]));
+  if (view.mode !== "replay") setMode("replay");
   selectRound(r.number, true);
   if (moment[2] != null) { replay.tick = (r.freeze_end_tick ?? r.start_tick) + Number(moment[2]) * TR; draw(); }
 }
+if (linked) { view.mode = linked[0]; renderTools(); renderSide(); }
+showView(viewOfHash());
+openMoment();
 }
 </script>
 </body>
