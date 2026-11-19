@@ -24,4 +24,8 @@ At 64 ticks per second, an interval of 16 gives four samples per second. A small
 
 Use `stats.map_overview()` for built-in radar calibration and `to_radar(pos)` for pixel coordinates. Handle an unknown map by supplying an overview or displaying world coordinates. The recorder’s range lookup works on frames already collected. For seeking after a server restart, store frames during import and retrieve them by match and tick.
 
+## Radar calibration
+
+`maps::MapOverview` has calibration for Ancient, Anubis, Cache, Dust2, Inferno, Mirage, Nuke, Overpass, Train and Vertigo. The tests check those in the test demos (Anubis, Cache, Dust2, Inferno, Mirage and Nuke); the others are untested. `MapOverview::from_kv` reads the game's own overview files (`resource/overviews/<map>.txt`), to fix a value or for any other map.
+
 [Runnable radar example](https://github.com/P0wders/CS2-Demo-Library/blob/main/examples/replay.rs)
