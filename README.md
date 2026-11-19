@@ -11,7 +11,7 @@ health, money, weapons, …) and the numbers a team analyst works with:
 - **Utility:** every grenade, with its lineup, flight, and effect (players blinded, damage, smoke and fire duration).
 - **Aim:** accuracy, head hits, first-shot accuracy, counter-strafing, crosshair placement and time to kill.
 - **Scouting across many demos:** map records, side and pistol win rates, buys, site preferences, setups and lineups.
-- **Match viewer:** a web page you open with a double-click. Drop a demo on it to see radar maps, heatmaps and a 2D replay of every round. It runs in the browser and uploads nothing.
+- **2D replay and radar positions:** players, grenades, smokes, fires and the bomb over time, placed on the map's radar image.
 
 ```rust
 let stats = cs2_demo::Demo::open("match.dem")?.match_stats()?;
@@ -38,7 +38,7 @@ for p in &stats.players {
 - [Quick start](#quick-start)
 - [What the stats contain](#what-the-stats-contain)
 - [Scouting several demos](#scouting-several-demos)
-- [Match viewer and 2D replay](#match-viewer-and-2d-replay)
+- [2D replay and radar positions](#2d-replay-and-radar-positions)
 - [Examples](#examples)
 - [Performance](#performance)
 - [Compatibility](#compatibility)
@@ -109,8 +109,7 @@ fn main() -> Result<(), cs2_demo::Error> {
 }
 ```
 
-This is that data for Nemiga vs Vitality on Cache, as rendered by the `report`
-example ([full report with sides, utility, aim, economy, rounds, clutches and kill feed](docs/report-nemiga-vs-vitality.md)):
+This is the scoreboard part of that data for Nemiga vs Vitality on Cache:
 
 **Nemiga 13 – 8 Team Vitality** (de_cache)
 
@@ -361,80 +360,58 @@ per-map stats and usual callouts on each side.
 Teams are matched by name, ignoring case, punctuation and a leading "Team"
 ("Team Vitality" = "Vitality"). `Scouting::alias` merges other names.
 
-## Match viewer and 2D replay
+## 2D replay and radar positions
 
-A web page that shows a demo. Open it in a browser, drop a `.dem` file on it
-(or click **Choose a demo…**), and the report appears a few seconds later. It
-needs no server and no install. The page is one HTML file with the parser
-inside, compiled to WebAssembly, and the demo never leaves the browser.
+`replay::PositionRecorder` is a visitor that samples players, grenades, smokes,
+fires and the bomb every few ticks. Run it next to the statistics to get both
+in one parse:
 
-Build the page once, and again after changing the library:
+```rust
+use cs2_demo::replay::PositionRecorder;
+use cs2_demo::{Demo, ParseOptions, StatsCollector};
 
-```sh
-rustup target add wasm32-unknown-unknown   # once
-cargo run -p cs2_demo_web
+let demo = Demo::open("match.dem")?;
+let mut both = (StatsCollector::new(), PositionRecorder::every(16));
+let ctx = demo.parse(ParseOptions::default(), &mut both)?;
+let (collector, recorder) = both;
+let stats = collector.into_stats(&ctx);
+let round = &stats.rounds[0];
+let frames = recorder.frames_between(round.start_tick, round.end_tick.unwrap_or(i32::MAX));
 ```
-
-This writes `web/dist/cs2-demo-viewer.html` (about 1 MB). Double-click it,
-or give it to anyone: it works offline in Chrome or Edge 91+, Firefox 89+ and
-Safari 16.4+ (it uses WebAssembly SIMD). A 342 MB pro demo shows up 3.5 to
-4 seconds after the drop. The report contains:
-
-- highlights and a sortable scoreboard, for both sides or T and CT only;
-- the round history with both teams' buys and how each round ended, with
-  details and the kill feed of each round;
-- an economy chart;
-- radar views of kills, grenades (with trajectories), repeated lineups and a
-  heatmap of positions, filtered by round, player, side and grenade type;
-- a 2D replay of every round: players with view direction, health and
-  weapons, grenades in flight, smokes, fires, the bomb and the kill feed;
-- utility, aim and clutch tables.
-
-Radar images belong to Valve and are not included. Drop the map's radar image
-on the page (a square overview such as `de_mirage_radar.png`, with "lower" in
-the name for the lower level of Nuke or Vertigo) to draw the map under the
-positions. The browser remembers it for that map. Without one, the map is
-sketched from where the players walked.
-
-**Save report** downloads one HTML file with the report inside (about 6 MB for
-a full match), to keep or share without the demo. Links like
-`report.html#round-7-45` open its replay of round 7, 45 s after freeze time,
-and `#map-lineups` opens a map view.
-
-The page's source is `web/viewer.html`, the code that runs in the browser is
-`web/wasm/src/lib.rs`, and `web/src/main.rs` builds the page. The page
-compiles the analyzer when it opens and starts a worker ahead of time, then
-reads a dropped demo straight into the analyzer's memory, four 16 MB parts at
-a time.
-
-The replay comes from `replay::PositionRecorder`, a visitor that samples
-players, grenades, smokes, fires and the bomb every few ticks. Run it next to
-the statistics, `(StatsCollector::new(), PositionRecorder::every(16))`, for
-your own replays.
 
 Positions are placed on radar images with `maps::MapOverview`. It has
 calibration for Ancient, Anubis, Cache, Dust2, Inferno, Mirage, Nuke,
 Overpass, Train and Vertigo. The tests check those in the test demos (Anubis,
 Cache, Dust2, Inferno, Mirage and Nuke); the others are untested.
 `MapOverview::from_kv` reads the game's own overview files
-(`resource/overviews/<map>.txt`), to fix a value or for any other map.
+(`resource/overviews/<map>.txt`), to fix a value or for any other map. The
+[`replay` example](examples/replay.rs) prints a round in radar pixels.
 
 ## Examples
 
-Run any example with `cargo run --release --example <name> -- match.dem`.
+[`examples/`](examples/) has short programs that each show one part of the
+API, with comments. Read them in this order (details in
+[examples/README.md](examples/README.md)), and run any of them with
+`cargo run --release --example <name> -- match.dem`.
 
-| Example | What it does |
+| Example | Shows |
 |---|---|
-| `report` | Markdown report: result, scoreboard, sides, utility and aim, rounds with buys, economy, clutches, highlights, kill feed, checks and parse times. Takes several demos: `-- a.dem b.dem > report.md` |
-| `scout` | Markdown scouting report on one team from many demos: `-- "Vitality" demos/ > scouting.md` |
-| `lineups` | every grenade as CSV (thrower, spot, angles, landing, effect), or the repeated lineups with `--lineups` |
-| `scoreboard` | HLTV-style scoreboard and round history in the terminal |
-| `dump_events` | every game event with player names, optionally filtered: `-- match.dem player_death,bomb_planted` |
-| `positions` | every living player's position as CSV, for heatmaps or 2D replays: `-- match.dem 64 > positions.csv` |
-| `inspect` | structural summary: entity counts, string tables, event counts and parse speed |
-| `dump_schema` | every networked class and property, with its encoding |
-| `round_check` | one player's per-round kills and deaths from events next to the server's per-round counters: `-- match.dem <player name>` |
-| `timing` | parse time of each mode |
+| `quick_start` | open a demo, read its header, get the score and the scoreboard |
+| `rounds` | rounds, buys, the bomb, one player's rounds, clutches, custom buy thresholds |
+| `kill_feed` | every kill with weapon, callouts and flags; kills per weapon; opening duels |
+| `grenades` | every grenade and its effect; utility per player; repeated lineups |
+| `aim` | accuracy, first-shot accuracy, counter-strafing, crosshair placement, time to kill |
+| `events` | a first `Visitor`: game events, their fields and player names |
+| `game_state` | reading the `Context` every N ticks: positions, health, money, raw properties |
+| `combine` | your visitor and the built-in statistics in one parse |
+| `replay` | `PositionRecorder` frames in radar pixels |
+| `many_demos` | `match_stats_many` over a folder of demos |
+| `scouting` | a team's profile across many demos |
+| `json` | save and load `MatchStats` as JSON (`--features serde`) |
+| `chat` | raw net messages decoded with `proto`: the in-game chat (`--features user-messages`) |
+
+[`examples/dev/`](examples/dev/) holds tools for working on the parser:
+`dump_schema`, `inspect`, `round_check` and `timing`.
 
 ## Performance
 
@@ -449,8 +426,6 @@ in the OS cache, best of several runs.
 | Game events only | 0.13 s | 2.6 GB/s |
 | Full parse: 4.76 million entity updates | 1.95 s | 175 MB/s |
 | `match_stats()`: full parse plus every statistic above | 2.12 s | 162 MB/s |
-| Match viewer (WebAssembly, in Node): statistics and replay frames | 2.6 s | |
-| Match viewer in Chrome: from the drop to the report on screen | 3.4–4.0 s | |
 
 Memory: about 12 MB besides the memory-mapped file, which stays in the OS page
 cache rather than being copied.
@@ -556,8 +531,6 @@ CS2_DEMO_DIR=path/to/demos cargo test     # run the integration suite on your de
 CS2_DEMO_DIR=path/to/demos cargo test --features serde   # also checks the JSON round trip
 CS2_DEMO_BENCH=path/to/demo.dem cargo bench
 cargo clippy --all-targets --features serde,user-messages
-cargo run -p cs2_demo_web                 # build the match viewer (web/dist/cs2-demo-viewer.html)
-cargo test -p cs2_demo_wasm               # the viewer's analysis, natively, on a demo of CS2_DEMO_DIR or Demo/
 ```
 
 In PowerShell, set the variable first: `$env:CS2_DEMO_DIR = "D:\demos"`.

@@ -62,7 +62,7 @@
 //!   several files; [`stats`] opens the first round on its first event and
 //!   numbers rounds from the game's own round counter.
 //! * Set `CS2_DEMO_TRACE=1` to log every decoded entity field to stderr when
-//!   investigating a new game build (see also `examples/dump_schema.rs`).
+//!   investigating a new game build (see also `examples/dev/dump_schema.rs`).
 
 pub mod bitreader;
 pub mod container;

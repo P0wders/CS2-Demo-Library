@@ -4,12 +4,6 @@ version = "0.1.0"
 edition = "2024"
 description = "Fast, from-scratch parser for Counter-Strike 2 (.dem) demo files"
 license = "Apache-2.0"
-exclude = ["/web"]
-
-# The drag-and-drop match viewer: web/wasm is this crate compiled to
-# WebAssembly, web/ builds the page around it.
-[workspace]
-members = ["web", "web/wasm"]
 
 [lib]
 path = "src/lib.rs"
@@ -39,13 +33,6 @@ codegen-units = 1
 [profile.bench]
 debug = 1
 
-# The viewer's WebAssembly build: release without debug info. Thin LTO (from
-# release): fat LTO took 2.4 s longer per build for no measurable speed.
-[profile.wasm]
-inherits = "release"
-debug = 0
-strip = true
-
 # Integration tests parse ~350 MB demos; run them optimized.
 [profile.test]
 opt-level = 3
@@ -61,3 +48,29 @@ serde_json = "1.0.145"
 [[bench]]
 name = "parse"
 harness = false
+
+# Guides to the API: see examples/README.md. Most run on default features.
+[[example]]
+name = "json"
+required-features = ["serde"]
+
+[[example]]
+name = "chat"
+required-features = ["user-messages"]
+
+# Tools for working on the parser itself, in examples/dev/.
+[[example]]
+name = "dump_schema"
+path = "examples/dev/dump_schema.rs"
+
+[[example]]
+name = "inspect"
+path = "examples/dev/inspect.rs"
+
+[[example]]
+name = "round_check"
+path = "examples/dev/round_check.rs"
+
+[[example]]
+name = "timing"
+path = "examples/dev/timing.rs"

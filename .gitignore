@@ -1,15 +1,12 @@
 # Build output
 /target
-# The built viewer page (cargo run -p cs2_demo_web)
-/web/dist
 
 # Demo files: hundreds of MB each, and not ours to redistribute
 /Demo
 *.dem
 
-# Output of the examples when run from the project root
-/positions.csv
-/report.md
+# Written by the json example when run from the project root
+/stats.json
 
 # Editors
 .vscode/
