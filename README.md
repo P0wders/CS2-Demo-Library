@@ -42,7 +42,7 @@ The crate is not on crates.io yet. Add it from GitHub:
 
 ```toml
 [dependencies]
-cs2_demo = { git = "https://github.com/P0wders/cs2_demo" }
+cs2_demo = { git = "https://github.com/P0wders/CS2-Demo-Library" }
 
 # Optional: keep parsing fast in debug builds of your own program.
 [profile.dev.package.cs2_demo]
@@ -222,7 +222,7 @@ With the `serde` feature, `MatchStats` and everything in it implements
 `serde::Serialize`:
 
 ```toml
-cs2_demo = { git = "https://github.com/P0wders/cs2_demo", features = ["serde"] }
+cs2_demo = { git = "https://github.com/P0wders/CS2-Demo-Library", features = ["serde"] }
 serde_json = "1"
 ```
 
