@@ -1,5 +1,7 @@
 # Build output
 /target
+# The built viewer page (cargo run -p cs2_demo_web)
+/web/dist
 
 # Demo files: hundreds of MB each, and not ours to redistribute
 /Demo

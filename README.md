@@ -11,7 +11,7 @@ health, money, weapons, …) and the numbers a team analyst works with:
 - **Utility:** every grenade, with its lineup, flight, and effect (players blinded, damage, smoke and fire duration).
 - **Aim:** accuracy, head hits, first-shot accuracy, counter-strafing, crosshair placement and time to kill.
 - **Scouting across many demos:** map records, side and pistol win rates, buys, site preferences, setups and lineups.
-- **2D replay and radar positions:** players, grenades, smokes, fires and the bomb over time, placed on the map's radar image.
+- **Match viewer:** a web page you open with a double-click. Drop a demo on it to see radar maps, heatmaps and a 2D replay of every round. It runs in the browser and uploads nothing.
 
 ```rust
 let stats = cs2_demo::Demo::open("match.dem")?.match_stats()?;
@@ -38,7 +38,7 @@ for p in &stats.players {
 - [Quick start](#quick-start)
 - [What the stats contain](#what-the-stats-contain)
 - [Scouting several demos](#scouting-several-demos)
-- [2D replay and radar positions](#2d-replay-and-radar-positions)
+- [Match viewer and 2D replay](#match-viewer-and-2d-replay)
 - [Examples](#examples)
 - [Performance](#performance)
 - [Compatibility](#compatibility)
@@ -361,9 +361,53 @@ per-map stats and usual callouts on each side.
 Teams are matched by name, ignoring case, punctuation and a leading "Team"
 ("Team Vitality" = "Vitality"). `Scouting::alias` merges other names.
 
-## 2D replay and radar positions
+## Match viewer and 2D replay
 
-`replay::PositionRecorder` is a visitor that samples
+A web page that shows a demo. Open it in a browser, drop a `.dem` file on it
+(or click **Choose a demo…**), and the report appears a few seconds later. It
+needs no server and no install. The page is one HTML file with the parser
+inside, compiled to WebAssembly, and the demo never leaves the browser.
+
+Build the page once, and again after changing the library:
+
+```sh
+rustup target add wasm32-unknown-unknown   # once
+cargo run -p cs2_demo_web
+```
+
+This writes `web/dist/cs2-demo-viewer.html` (about 1 MB). Double-click it,
+or give it to anyone: it works offline in Chrome or Edge 91+, Firefox 89+ and
+Safari 16.4+ (it uses WebAssembly SIMD). A 342 MB pro demo shows up 3.5 to
+4 seconds after the drop. The report contains:
+
+- highlights and a sortable scoreboard, for both sides or T and CT only;
+- the round history with both teams' buys and how each round ended, with
+  details and the kill feed of each round;
+- an economy chart;
+- radar views of kills, grenades (with trajectories), repeated lineups and a
+  heatmap of positions, filtered by round, player, side and grenade type;
+- a 2D replay of every round: players with view direction, health and
+  weapons, grenades in flight, smokes, fires, the bomb and the kill feed;
+- utility, aim and clutch tables.
+
+Radar images belong to Valve and are not included. Drop the map's radar image
+on the page (a square overview such as `de_mirage_radar.png`, with "lower" in
+the name for the lower level of Nuke or Vertigo) to draw the map under the
+positions. The browser remembers it for that map. Without one, the map is
+sketched from where the players walked.
+
+**Save report** downloads one HTML file with the report inside (about 6 MB for
+a full match), to keep or share without the demo. Links like
+`report.html#round-7-45` open its replay of round 7, 45 s after freeze time,
+and `#map-lineups` opens a map view.
+
+The page's source is `web/viewer.html`, the code that runs in the browser is
+`web/wasm/src/lib.rs`, and `web/src/main.rs` builds the page. The page
+compiles the analyzer when it opens and starts a worker ahead of time, then
+reads a dropped demo straight into the analyzer's memory, four 16 MB parts at
+a time.
+
+The replay comes from `replay::PositionRecorder`, a visitor that samples
 players, grenades, smokes, fires and the bomb every few ticks. Run it next to
 the statistics, `(StatsCollector::new(), PositionRecorder::every(16))`, for
 your own replays.
@@ -405,6 +449,8 @@ in the OS cache, best of several runs.
 | Game events only | 0.13 s | 2.6 GB/s |
 | Full parse: 4.76 million entity updates | 1.95 s | 175 MB/s |
 | `match_stats()`: full parse plus every statistic above | 2.12 s | 162 MB/s |
+| Match viewer (WebAssembly, in Node): statistics and replay frames | 2.6 s | |
+| Match viewer in Chrome: from the drop to the report on screen | 3.4–4.0 s | |
 
 Memory: about 12 MB besides the memory-mapped file, which stays in the OS page
 cache rather than being copied.
@@ -510,6 +556,8 @@ CS2_DEMO_DIR=path/to/demos cargo test     # run the integration suite on your de
 CS2_DEMO_DIR=path/to/demos cargo test --features serde   # also checks the JSON round trip
 CS2_DEMO_BENCH=path/to/demo.dem cargo bench
 cargo clippy --all-targets --features serde,user-messages
+cargo run -p cs2_demo_web                 # build the match viewer (web/dist/cs2-demo-viewer.html)
+cargo test -p cs2_demo_wasm               # the viewer's analysis, natively, on a demo of CS2_DEMO_DIR or Demo/
 ```
 
 In PowerShell, set the variable first: `$env:CS2_DEMO_DIR = "D:\demos"`.

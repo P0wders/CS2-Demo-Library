@@ -1,0 +1,17 @@
+[package]
+name = "cs2_demo_web"
+version = "0.1.0"
+edition = "2024"
+description = "Builds the drag-and-drop match viewer: one HTML page with the analyzer (web/wasm) inside"
+license = "Apache-2.0"
+publish = false
+
+# `cargo run -p cs2_demo_web` builds web/wasm for the browser and writes the
+# page. It does not depend on the parser, so changing the library only
+# rebuilds the WebAssembly, not this program.
+[[bin]]
+name = "build-viewer"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1.0.145"

@@ -1,0 +1,1612 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CS2 demo viewer</title>
+<style>
+:root {
+  --bg: #0e1014; --panel: #161920; --panel2: #1d212a; --line: #2a303b; --text: #e7e9ee; --muted: #98a1b1;
+  --t: #e8a33d; --ct: #5b9cf0; --a: #3ec7a0; --b: #c085f5; --bad: #e05d5d; --good: #4fbf7a; --warn: #d9c64b;
+  --radius: 10px; --shadow: 0 1px 2px rgba(0,0,0,.4);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f4f5f8; --panel: #ffffff; --panel2: #f0f2f6; --line: #dde1e8; --text: #1b1f27; --muted: #5d6676;
+    --t: #c07a10; --ct: #2f6fd1; --a: #12936f; --b: #8a4fd0; --shadow: 0 1px 2px rgba(0,0,0,.08);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f4f5f8; --panel: #ffffff; --panel2: #f0f2f6; --line: #dde1e8; --text: #1b1f27; --muted: #5d6676;
+  --t: #c07a10; --ct: #2f6fd1; --a: #12936f; --b: #8a4fd0; --shadow: 0 1px 2px rgba(0,0,0,.08);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: inherit; }
+header.top { padding: 28px 16px 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 0 16px; }
+header.top .wrap { padding: 0; }
+.scoreline { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.scoreline .team { font-size: 26px; font-weight: 700; }
+.scoreline .score { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.scoreline .dash { color: var(--muted); font-size: 26px; }
+.sub { color: var(--muted); margin-top: 6px; display: flex; gap: 14px; flex-wrap: wrap; }
+nav.tabs { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
+nav.tabs .wrap { display: flex; gap: 4px; overflow-x: auto; padding: 8px 16px; }
+nav.tabs a { text-decoration: none; color: var(--muted); padding: 6px 10px; border-radius: 6px; white-space: nowrap; }
+nav.tabs a:hover { color: var(--text); background: var(--panel2); }
+main section { margin: 22px 0; }
+h2 { font-size: 17px; margin: 0 0 12px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+h2 small { font-weight: 400; color: var(--muted); font-size: 13px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.hl .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+.hl .who { font-weight: 650; font-size: 16px; margin-top: 4px; }
+.hl .num { font-size: 22px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.hl .what { color: var(--muted); font-size: 12px; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--panel); }
+th[title] { text-decoration: underline dotted; text-underline-offset: 3px; }
+th.sorted::after { content: " ▾"; }
+th.sorted.asc::after { content: " ▴"; }
+tbody tr:hover { background: var(--panel2); }
+.teamhead { display: flex; align-items: center; gap: 10px; margin: 4px 0 8px; font-weight: 700; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--panel2); border: 1px solid var(--line); }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { background: transparent; border: 0; color: var(--muted); padding: 5px 11px; cursor: pointer; font: inherit; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--panel2); color: var(--text); font-weight: 600; }
+select, button.btn { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 5px 9px; font: inherit; }
+button.btn { cursor: pointer; }
+button.btn:hover { border-color: var(--muted); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.good { color: var(--good); } .bad { color: var(--bad); } .muted { color: var(--muted); }
+.t { color: var(--t); } .ct { color: var(--ct); }
+.rounds { display: flex; gap: 3px; overflow-x: auto; padding-bottom: 6px; }
+.round { flex: 0 0 36px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel2); cursor: pointer; text-align: center; padding: 4px 0 3px; font-size: 11px; }
+.round:hover { border-color: var(--muted); }
+.round.sel { outline: 2px solid var(--text); outline-offset: 1px; }
+.round .n { color: var(--muted); }
+.round .w { height: 20px; display: grid; place-items: center; font-size: 13px; font-weight: 700; color: #111; border-radius: 4px; margin: 2px 3px; }
+.round .buy { font-size: 9.5px; font-weight: 700; border-radius: 3px; margin: 2px 3px 0; color: #111; }
+.half { flex: 0 0 8px; }
+.rdetail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 14px; margin-top: 12px; }
+@media (max-width: 860px) { .rdetail { grid-template-columns: 1fr; } }
+.feed { list-style: none; margin: 0; padding: 0; }
+.feed li { padding: 4px 0; border-bottom: 1px dashed var(--line); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.feed .time { color: var(--muted); font-variant-numeric: tabular-nums; width: 44px; flex: none; }
+.tag { font-size: 10.5px; padding: 0 5px; border-radius: 4px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+.kv div:nth-child(odd) { color: var(--muted); }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 12px; margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+svg text { fill: var(--muted); font-size: 11px; }
+.mapgrid { display: grid; grid-template-columns: minmax(0, 860px) minmax(260px, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 1100px) { .mapgrid { grid-template-columns: 1fr; } }
+.canvasbox { position: relative; background: #0a0c10; border-radius: var(--radius); border: 1px solid var(--line); overflow: hidden; touch-action: none; }
+canvas#radar { display: block; cursor: grab; }
+canvas#radar.drag { cursor: grabbing; }
+.tip { position: absolute; pointer-events: none; background: rgba(12,14,18,.94); color: #e7e9ee; border: 1px solid #3a4150; border-radius: 7px; padding: 6px 8px; font-size: 12px; max-width: 280px; display: none; z-index: 3; }
+.hint { position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: #8d96a6; pointer-events: none; }
+.side { display: flex; flex-direction: column; gap: 12px; }
+.timeline { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.timeline input[type=range] { flex: 1 1 200px; accent-color: var(--text); }
+.clock { font-variant-numeric: tabular-nums; min-width: 92px; text-align: center; font-weight: 650; }
+.hud { display: grid; gap: 6px; }
+.hudrow { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; padding: 4px 6px; border-radius: 6px; background: var(--panel2); }
+.hudrow.dead { opacity: .45; }
+.hudrow .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hudrow .wp { color: var(--muted); font-size: 12px; text-align: right; }
+.hp { grid-column: 1 / -1; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.hp > i { display: block; height: 100%; }
+.list { max-height: 420px; overflow: auto; }
+.list .item { padding: 6px 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+.list .item:hover, .list .item.on { background: var(--panel2); border-color: var(--line); }
+footer { color: var(--muted); font-size: 12px; padding: 24px 16px 40px; border-top: 1px solid var(--line); margin-top: 30px; }
+footer p { max-width: 900px; margin: 6px 0; }
+.empty { color: var(--muted); padding: 10px 0; }
+.wbar { display: inline-block; height: 6px; border-radius: 3px; background: var(--muted); vertical-align: middle; margin-left: 6px; opacity: .6; }
+.topbar { display: flex; gap: 14px 20px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- start screen: drop a demo ---------- */
+.start { min-height: 100vh; display: grid; place-items: center; padding: 32px 16px; }
+.start[hidden] { display: none; }
+.dropcard { width: min(600px, 100%); text-align: center; background: var(--panel); border: 2px dashed var(--line); border-radius: 18px; padding: 44px 28px 28px; box-shadow: var(--shadow); transition: border-color .15s, background-color .15s; }
+body.dragging .dropcard { border-color: var(--a); background: color-mix(in srgb, var(--a) 7%, var(--panel)); }
+.mark { width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 14px; display: grid; place-items: center; background: var(--panel2); border: 1px solid var(--line); color: var(--a); }
+.dropcard h1 { font-size: 24px; margin: 0 0 6px; letter-spacing: -.01em; }
+.lead { color: var(--muted); margin: 0 0 22px; font-size: 15px; }
+.lead b { color: var(--text); }
+button.btn.primary { background: var(--a); color: #06140f; border-color: var(--a); font-weight: 650; padding: 9px 18px; font-size: 15px; }
+button.btn.primary:hover { filter: brightness(1.08); border-color: var(--a); }
+.fine { color: var(--muted); font-size: 12.5px; margin: 22px auto 0; max-width: 470px; }
+.fine + .fine { margin-top: 8px; }
+code { font-size: 12px; background: var(--panel2); border: 1px solid var(--line); padding: 0 5px; border-radius: 4px; }
+.progress { text-align: left; }
+.pname { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar { height: 8px; margin-top: 12px; background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--a); transition: width .2s; }
+.bar.busy > i { width: 35%; animation: busy 1.1s ease-in-out infinite alternate; }
+@keyframes busy { from { margin-left: 0; } to { margin-left: 65%; } }
+.pmeta { color: var(--muted); font-size: 12.5px; display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.prow { display: flex; justify-content: flex-end; margin-top: 14px; }
+.alert, .notice { margin-top: 18px; text-align: left; border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.alert { background: color-mix(in srgb, var(--bad) 12%, var(--panel)); border: 1px solid color-mix(in srgb, var(--bad) 45%, var(--line)); }
+.notice { background: var(--panel2); border: 1px solid var(--line); }
+#back { margin-top: 12px; }
+#veil { position: fixed; inset: 10px; z-index: 50; display: none; place-items: center; border: 3px dashed var(--a); border-radius: 18px; background: color-mix(in srgb, var(--bg) 80%, transparent); pointer-events: none; }
+body.dragging.has-report #veil { display: grid; }
+#veil div { font-size: 19px; font-weight: 700; background: var(--panel); border: 1px solid var(--line); padding: 14px 22px; border-radius: 12px; box-shadow: var(--shadow); }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 60; background: var(--panel); border: 1px solid var(--line); padding: 10px 14px; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.35); width: max-content; max-width: calc(100% - 32px); }
+@media (prefers-reduced-motion: reduce) { .bar > i, .dropcard { transition: none; } .bar.busy > i { animation: none; width: 100%; opacity: .5; } }
+</style>
+</head>
+<body>
+<section class="start" id="start">
+  <div class="dropcard">
+    <div class="mark" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 1.5v4.5M12 18v4.5M1.5 12H6M18 12h4.5"/></svg></div>
+    <h1>CS2 demo viewer</h1>
+    <p class="lead" id="lead">Drop a <b>.dem</b> file anywhere on this page</p>
+    <div id="choose"><button class="btn primary" id="pick" type="button">Choose a demo…</button></div>
+    <div class="progress" id="progress" hidden>
+      <div class="pname" id="pname"></div>
+      <div class="bar" id="bar" role="progressbar" aria-label="Progress" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+      <div class="pmeta"><span id="pstep"></span><span id="ptime"></span></div>
+      <div class="prow"><button class="btn" id="cancel" type="button">Cancel</button></div>
+    </div>
+    <div class="alert" id="alert" role="alert" hidden></div>
+    <div class="notice" id="notice" role="status" hidden></div>
+    <div id="back" hidden><button class="btn" id="backbtn" type="button">Back to the report</button></div>
+    <p class="fine">Everything runs in this browser: the demo is not uploaded anywhere. A full match takes 3 to 4 seconds.</p>
+    <p class="fine">To draw the map under the positions, drop the map's radar image too (a square overview such as <code>de_mirage_radar.png</code>). It is remembered for that map; put “lower” in the file name for the lower level of Nuke or Vertigo.</p>
+  </div>
+</section>
+<div id="report" hidden></div>
+<div id="veil" aria-hidden="true"><div>Drop to open</div></div>
+<input type="file" id="file-demo" accept=".dem" hidden>
+<input type="file" id="file-radar" accept="image/*" multiple hidden>
+
+<template id="skeleton">
+<header class="top"><div class="wrap topbar"><div id="head"></div>
+  <div class="actions">
+    <button class="btn" type="button" data-act="open">Open demo…</button>
+    <button class="btn" type="button" data-act="radar" title="A square radar overview of this map, drawn under the positions">Radar image…</button>
+    <button class="btn" type="button" data-act="save" title="One HTML file with this report inside, to keep or share">Save report</button>
+  </div></div></header>
+<nav class="tabs"><div class="wrap">
+  <a href="#overview">Overview</a><a href="#scoreboard">Scoreboard</a><a href="#rounds">Rounds</a>
+  <a href="#economy">Economy</a><a href="#map">Map &amp; replay</a><a href="#utility">Utility</a>
+  <a href="#aim">Aim</a><a href="#clutches">Clutches</a>
+</div></nav>
+<main class="wrap">
+  <section id="overview"><h2>Highlights</h2><div class="cards" id="highlights"></div></section>
+  <section id="scoreboard"><h2>Scoreboard <small>click a column to sort</small></h2>
+    <div class="toolbar"><div class="seg" id="sbside"></div></div>
+    <div class="card" id="sbtables"></div></section>
+  <section id="rounds"><h2>Rounds <small>click a round for details and its replay</small></h2>
+    <div class="card"><div class="rounds" id="strip"></div>
+    <div class="legend" id="striplegend"></div>
+    <div class="rdetail" id="rdetail"></div></div></section>
+  <section id="economy"><h2>Economy <small>team equipment value when freeze time ends</small></h2>
+    <div class="card"><svg id="eco" width="100%" role="img" aria-label="Equipment value per round"></svg>
+    <div class="legend" id="ecolegend"></div></div></section>
+  <section id="map"><h2>Map &amp; replay <small id="mapnote"></small></h2>
+    <div class="toolbar" id="maptools"></div>
+    <div class="mapgrid">
+      <div><div class="canvasbox" id="canvasbox"><canvas id="radar" width="1024" height="1024"></canvas><div class="tip" id="tip"></div><div class="hint">scroll to zoom · drag to pan · double-click to reset</div></div>
+        <div class="timeline" id="timeline"></div></div>
+      <div class="side" id="mapside"></div>
+    </div></section>
+  <section id="utility"><h2>Utility</h2><div class="card tablewrap" id="utiltable"></div></section>
+  <section id="aim"><h2>Aim &amp; mechanics <small>from every shot; approximate (64-tick demos)</small></h2><div class="card tablewrap" id="aimtable"></div></section>
+  <section id="clutches"><h2>Clutches</h2><div class="card tablewrap" id="clutchtable"></div></section>
+</main>
+<footer><div class="wrap" id="foot"></div></footer>
+</template>
+
+<!-- The analyzer (cs2_demo compiled to WebAssembly, base64), put here by `cargo run -p cs2_demo_web`. -->
+<script id="wasm" type="application/octet-stream">/*__WASM__*/</script>
+<!-- A saved report's data. -->
+<script id="data" type="application/json">/*__DATA__*/null</script>
+<script>
+"use strict";
+window.addEventListener("error", (e) => {
+  const pre = document.createElement("pre");
+  pre.id = "report-error";
+  pre.style.cssText = "background:#5c1a1a;color:#fff;padding:12px;margin:0;white-space:pre-wrap";
+  pre.textContent = "The viewer hit an error: " + (e.error && e.error.stack ? e.error.stack : e.message);
+  document.body.prepend(pre);
+});
+
+/* ---------- the analyzer: runs in a worker, or on the page if workers are blocked ---------- */
+// One analyzer: `load` gives it the compiled module, `run` one demo. Workers
+// are made from this function's source, so it uses nothing from outside its
+// body. `post` gets "ready", progress, then "done" (with the report's JSON)
+// or "error".
+function makeAnalyzer(post) {
+  // Reading the file in 16 MB parts, 4 at a time, measured fastest in Chrome
+  // (0.2 s for a 342 MB demo, against 0.35 s one 32 MB part at a time).
+  const PART = 16 << 20, PARALLEL = 4;
+  let ready = null, memory = null, panic = "";
+  const text = (ptr, len) => new TextDecoder().decode(new Uint8Array(memory.buffer, ptr >>> 0, len >>> 0));
+  const imports = {
+    viewer: {
+      progress: (value) => post({ type: "progress", phase: "parse", value }),
+      panicked: (ptr, len) => { panic = text(ptr, len); },
+    },
+  };
+  return {
+    // Instantiated ahead of time, while no demo is waiting.
+    load(module) {
+      ready = WebAssembly.instantiate(module, imports);
+      ready.then(() => post({ type: "ready" }), () => {});
+    },
+    async run({ file, every }) {
+      try {
+        const x = (await ready).exports;
+        memory = x.memory;
+        const size = file.size;
+        const ptr = x.input(size) >>> 0;
+        if (!ptr) throw new Error(`the browser could not give the analyzer ${Math.round(size / 1e6)} MB of memory for this demo. Close other tabs and try again.`);
+        // Straight into the module's memory: a WebAssembly memory can't be
+        // handed to a reader, so each part is copied once, as it arrives.
+        const t0 = performance.now();
+        let next = 0, done = 0;
+        await Promise.all(Array.from({ length: PARALLEL }, async () => {
+          while (next < size) {
+            const at = next;
+            next += PART;
+            const part = new Uint8Array(await file.slice(at, Math.min(size, at + PART)).arrayBuffer());
+            new Uint8Array(memory.buffer, ptr + at, part.length).set(part);
+            done += part.length;
+            post({ type: "progress", phase: "read", value: done / size });
+          }
+        }));
+        const t1 = performance.now();
+        const status = x.analyze(every);
+        const t2 = performance.now();
+        const out = text(x.output_ptr(), x.output_len());
+        if (status !== 0) throw new Error(out);
+        post({ type: "done", json: out, readSeconds: (t1 - t0) / 1000, analyzeSeconds: (t2 - t1) / 1000 });
+      } catch (e) {
+        post({ type: "error", message: panic ? "the analyzer crashed: " + panic : String((e && e.message) || e) });
+      }
+    },
+  };
+}
+
+/* ---------- the app: open demos and radar images, show the report ---------- */
+const el = (id) => document.getElementById(id);
+const DATA_MARKER = "/*__" + "DATA__*/null";
+const REPLAY_EVERY = 16; // ticks between replay frames: 4 per second
+const embedded = el("data").textContent.trim();
+el("data").textContent = DATA_MARKER;
+// The page as loaded, without report data: "Save report" puts the data back in.
+const SOURCE = "<!doctype html>\n" + document.documentElement.outerHTML;
+const WASM_B64 = el("wasm").textContent.trim();
+const CAN_ANALYZE = WASM_B64 !== "" && !WASM_B64.startsWith("/*");
+let current = null;      // the report on screen
+let renderAbort = null;  // stops the current report's listeners and replay loop
+let job = null;          // the analysis running
+const pendingRadars = []; // radar images dropped before their demo
+
+/* ---------- starting analyzers ---------- */
+// The module is compiled once, when the page opens. Each demo gets its own
+// worker, whose memory goes back to the system when it ends; the next one is
+// started and instantiated in advance. Besides reading a dropped demo at once,
+// that makes the parse faster: in Chrome, a worker that parses right after
+// instantiating takes 3.6–3.9 s on a 342 MB demo, one instantiated 2 s
+// earlier 2.9–3.1 s (the browser finishes preparing the code meanwhile).
+let modulePromise = null;
+let standby = null;
+let workersWork = true; // false once a worker failed to start: then analyze on the page
+const WORKER_URL = URL.createObjectURL(new Blob([`"use strict";\n${makeAnalyzer}
+const analyzer = makeAnalyzer((m) => postMessage(m));
+onmessage = (e) => (e.data.module ? analyzer.load(e.data.module) : analyzer.run(e.data));`], { type: "text/javascript" }));
+
+function compileModule() {
+  if (!modulePromise) {
+    let bytes;
+    if (Uint8Array.fromBase64) bytes = Uint8Array.fromBase64(WASM_B64); // 1 ms, against ~50 ms below
+    else {
+      const bin = atob(WASM_B64);
+      bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    }
+    modulePromise = WebAssembly.compile(bytes);
+  }
+  return modulePromise;
+}
+// An analyzer in a worker, or on the page if the browser won't start workers
+// for a page opened from disk (the page then freezes while it works).
+function startAnalyzer(module) {
+  const a = { onMessage() {}, started: false, task: null };
+  const onPage = () => {
+    workersWork = false;
+    const page = makeAnalyzer((m) => { if (m.type !== "ready") a.onMessage(m); });
+    page.load(module);
+    a.run = (task) => setTimeout(() => page.run(task), 30); // lets the page show "Analyzing" first
+    a.stop = () => {};
+    if (a.task) a.run(a.task);
+  };
+  if (!workersWork) { onPage(); return a; }
+  try {
+    const worker = new Worker(WORKER_URL);
+    worker.onmessage = (e) => { if (e.data.type === "ready") a.started = true; else a.onMessage(e.data); };
+    worker.onerror = (e) => {
+      e.preventDefault();
+      worker.terminate();
+      if (!a.started) onPage();
+      else a.onMessage({ type: "error", message: e.message || "the analyzer stopped" });
+    };
+    worker.postMessage({ module });
+    a.run = (task) => { a.task = task; worker.postMessage(task); };
+    a.stop = () => worker.terminate();
+  } catch {
+    onPage();
+  }
+  return a;
+}
+
+const mb = (n) => (n / 1e6).toFixed(n < 1e7 ? 1 : 0) + " MB";
+const nextFrame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+const isDemo = (f) => /\.dem$/i.test(f.name);
+const isImage = (f) => /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(f.name);
+const isArchive = (f) => /\.(gz|zip|rar|bz2|zst|7z|xz|tar)$/i.test(f.name);
+const mapOf = (data) => data.stats.map || data.meta.map || "";
+
+function showStart(state, message) {
+  el("choose").hidden = state === "working" || !CAN_ANALYZE;
+  el("progress").hidden = state !== "working";
+  el("alert").hidden = state !== "error";
+  el("alert").textContent = state === "error" ? message : "";
+  el("notice").hidden = true;
+  el("back").hidden = !current || state === "working";
+  el("start").hidden = false;
+  el("report").hidden = true;
+  document.body.classList.remove("has-report");
+}
+function notice(message) {
+  if (!el("start").hidden) { el("notice").textContent = message; el("notice").hidden = false; return; }
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.setAttribute("role", "status");
+  t.textContent = message;
+  document.body.append(t);
+  setTimeout(() => t.remove(), 4500);
+}
+function complain(message) {
+  if (current && el("start").hidden) notice(message);
+  else showStart("error", message);
+}
+function setProgress(step, fraction, busy) {
+  el("pstep").textContent = step;
+  el("bar").classList.toggle("busy", !!busy);
+  el("bar").firstElementChild.style.width = busy ? "" : (100 * fraction).toFixed(1) + "%";
+  if (busy) el("bar").removeAttribute("aria-valuenow");
+  else el("bar").setAttribute("aria-valuenow", Math.round(100 * fraction));
+}
+
+function handleFiles(list) {
+  const files = [...list];
+  const demo = files.find(isDemo) || files.find((f) => !isImage(f) && !isArchive(f));
+  const images = files.filter(isImage);
+  if (!demo && !images.length) {
+    const f = files[0];
+    if (f) complain(isArchive(f) ? `${f.name} is an archive: extract the .dem file from it, then drop that.` : `${f.name} is not a demo.`);
+    return;
+  }
+  Promise.all(images.map(readRadar)).then(async (radars) => {
+    if (demo || !current) {
+      pendingRadars.push(...radars);
+      if (!demo) notice(`Radar image ready: it will be used for the next demo you open.`);
+    } else {
+      for (const r of radars) await useRadar(current, r);
+      render(true);
+      notice(`Radar image saved for ${mapOf(current)}.`);
+    }
+    if (demo) openDemo(demo);
+  });
+}
+function readRadar(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({ level: /lower/i.test(file.name) ? "lower" : "upper", url: reader.result });
+    reader.readAsDataURL(file);
+  });
+}
+async function useRadar(data, radar) {
+  data.meta[radar.level === "lower" ? "radar_lower" : "radar"] = radar.url;
+  await radarStore.put(mapOf(data) + ":" + radar.level, radar.url);
+}
+
+// Radar images, remembered per map in the browser (IndexedDB). Best effort:
+// without storage (private windows, some browsers on local files) nothing is kept.
+const radarStore = (() => {
+  let db = null;
+  const open = () => db || (db = new Promise((resolve, reject) => {
+    const rq = indexedDB.open("cs2-demo-viewer", 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore("radars");
+    rq.onsuccess = () => resolve(rq.result);
+    rq.onerror = () => reject(rq.error);
+  }));
+  const run = async (mode, f) => {
+    const store = (await open()).transaction("radars", mode).objectStore("radars");
+    return new Promise((resolve, reject) => { const rq = f(store); rq.onsuccess = () => resolve(rq.result); rq.onerror = () => reject(rq.error); });
+  };
+  return {
+    get: (key) => run("readonly", (s) => s.get(key)).catch(() => undefined),
+    put: (key, url) => run("readwrite", (s) => s.put(url, key)).catch(() => {}),
+  };
+})();
+
+async function openDemo(file) {
+  if (!CAN_ANALYZE) return complain("This page can't analyze demos: it is the viewer's source. Build the viewer with cargo run -p cs2_demo_web, then open web/dist/cs2-demo-viewer.html.");
+  if (file.size >= 2 ** 31) return complain(`${file.name} is ${mb(file.size)}: too large for the browser (2 GB at most).`);
+  if (job) job.cancel();
+  const started = performance.now();
+  el("pname").textContent = `${file.name} · ${mb(file.size)}`;
+  el("ptime").textContent = "";
+  setProgress("Reading the file", 0);
+  showStart("working");
+  const timer = setInterval(() => { el("ptime").textContent = ((performance.now() - started) / 1000).toFixed(0) + " s"; }, 500);
+  let analyzer = null;
+  const me = {
+    cancel() {
+      clearInterval(timer);
+      if (analyzer) analyzer.stop(); // its memory goes back to the system
+      if (job === me) job = null;
+      compileModule().then((module) => { standby ||= startAnalyzer(module); }, () => {});
+    },
+  };
+  job = me;
+  let module;
+  try {
+    module = await compileModule();
+  } catch (e) {
+    me.cancel();
+    return showStart("error", `This browser can't run the analyzer (${e.message}). It needs Chrome or Edge 91, Firefox 89, Safari 16.4 or newer.`);
+  }
+  if (job !== me) return;
+  analyzer = standby || startAnalyzer(module);
+  standby = null;
+  const onMessage = async (m) => {
+    if (job !== me) return;
+    if (m.type === "progress" && m.phase === "read") {
+      if (m.value < 1) setProgress(`Reading the file · ${mb(m.value * file.size)}`, 0.08 * m.value);
+      else setProgress("Analyzing", 0.08, true);
+    } else if (m.type === "progress") {
+      setProgress(`Analyzing · ${Math.round(100 * m.value)}%`, 0.08 + 0.92 * m.value);
+    } else if (m.type === "error") {
+      me.cancel();
+      showStart("error", `Could not open ${file.name}: ${m.message}`);
+    } else if (m.type === "done") {
+      me.cancel();
+      setProgress("Drawing the report", 1);
+      await nextFrame();
+      let data;
+      try { data = JSON.parse(m.json); } catch (e) { return showStart("error", `Could not open ${file.name}: ${e.message}`); }
+      data.meta.file = file.name;
+      data.meta.parse_seconds = (performance.now() - started) / 1000;
+      data.meta.read_seconds = m.readSeconds;
+      data.meta.analyze_seconds = m.analyzeSeconds;
+      await showReport(data);
+    }
+  };
+  analyzer.onMessage = onMessage;
+  analyzer.run({ file, every: REPLAY_EVERY });
+}
+
+async function showReport(data) {
+  // Radar images dropped with this demo, else the ones remembered for its map.
+  for (const r of pendingRadars.splice(0)) await useRadar(data, r);
+  for (const [level, key] of [["upper", "radar"], ["lower", "radar_lower"]]) {
+    if (!data.meta[key]) data.meta[key] = (await radarStore.get(mapOf(data) + ":" + level)) || null;
+  }
+  current = data;
+  render(false);
+}
+function render(keepScroll) {
+  if (renderAbort) renderAbort.abort();
+  renderAbort = new AbortController();
+  const y = keepScroll ? scrollY : 0;
+  el("start").hidden = true;
+  el("report").hidden = false;
+  document.body.classList.add("has-report");
+  el("report").replaceChildren(el("skeleton").content.cloneNode(true));
+  renderReport(current, renderAbort.signal);
+  scrollTo(0, y);
+}
+function saveReport() {
+  // Every "<" escaped, so no closing script tag can end the data early.
+  const json = JSON.stringify(current).replace(/</g, "\\u003c");
+  const html = SOURCE.replace(DATA_MARKER, () => json);
+  const teams = [...current.stats.teams].sort((a, b) => b.score - a.score).map((t) => t.name).join(" vs ");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  a.download = `${teams || "match"} - ${mapOf(current)}.html`.replace(/[\\/:*?"<>|]+/g, "_");
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+
+// Drag and drop anywhere on the page.
+let dragDepth = 0;
+const carriesFiles = (e) => !!e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+const endDrag = () => { dragDepth = 0; document.body.classList.remove("dragging"); };
+addEventListener("dragenter", (e) => { if (!carriesFiles(e)) return; e.preventDefault(); dragDepth++; document.body.classList.add("dragging"); });
+addEventListener("dragleave", (e) => { if (carriesFiles(e) && --dragDepth <= 0) endDrag(); });
+addEventListener("dragover", (e) => { if (!carriesFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+addEventListener("drop", (e) => { if (!carriesFiles(e)) return; e.preventDefault(); endDrag(); handleFiles(e.dataTransfer.files); });
+
+el("pick").addEventListener("click", () => el("file-demo").click());
+el("cancel").addEventListener("click", () => { if (job) job.cancel(); showStart("idle"); });
+el("backbtn").addEventListener("click", () => render(false));
+for (const id of ["file-demo", "file-radar"]) {
+  el(id).addEventListener("change", (e) => { const files = [...e.target.files]; e.target.value = ""; if (files.length) handleFiles(files); });
+}
+el("report").addEventListener("click", (e) => {
+  const act = e.target.closest("[data-act]")?.dataset.act;
+  if (act === "open") el("file-demo").click();
+  else if (act === "radar") el("file-radar").click();
+  else if (act === "save") saveReport();
+});
+
+if (!CAN_ANALYZE) {
+  el("lead").innerHTML = "This is the viewer's source page. Build the viewer with <code>cargo run -p cs2_demo_web</code>, then open <code>web/dist/cs2-demo-viewer.html</code>.";
+}
+if (embedded !== DATA_MARKER && embedded !== "null") {
+  try {
+    current = JSON.parse(embedded);
+  } catch (e) {
+    showStart("error", "This saved report's data is damaged: " + e.message);
+  }
+  if (current) render(false);
+} else {
+  showStart("idle");
+}
+// Get the analyzer ready while the user picks a demo, and open the radar
+// storage (its first use takes ~50 ms).
+if (CAN_ANALYZE) compileModule().then((module) => { standby ||= startAnalyzer(module); }, () => {});
+radarStore.get("");
+
+/* ---------- the report ---------- */
+function renderReport(DATA, signal) {
+const S = DATA.stats, M = DATA.meta, R = DATA.replay, LINEUPS = DATA.lineups || [];
+const TR = S.tick_rate || 64;
+const OV = M.overview;
+
+/* ---------- helpers ---------- */
+const $ = (s) => document.querySelector(s);
+function h(tag, props, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") e.className = v;
+    else if (k === "style") e.style.cssText = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat(Infinity)) if (k != null && k !== false) e.append(k instanceof Node ? k : String(k));
+  return e;
+}
+const svgEl = (tag, attrs, ...kids) => {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs || {})) if (v != null) e.setAttribute(k, v);
+  for (const k of kids) if (k != null) e.append(k instanceof Node ? k : String(k));
+  return e;
+};
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const ratio = (a, b) => (b ? a / b : 0);
+const pct = (a, b) => (b ? Math.round((100 * a) / b) + "%" : "–");
+const median = (v) => {
+  if (!v || !v.length) return null;
+  const s = [...v].sort((a, b) => a - b), m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+const mmss = (sec) => {
+  if (sec == null || !isFinite(sec)) return "";
+  const s = Math.max(0, Math.round(sec));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+};
+const sideOf = (s) => (s === "Terrorist" ? "t" : s === "CounterTerrorist" ? "ct" : "");
+const SIDE_LABEL = { t: "T", ct: "CT" };
+const sideColor = (s) => (sideOf(s) === "t" ? css("--t") : sideOf(s) === "ct" ? css("--ct") : css("--muted"));
+
+const WNAME = { ak47: "AK-47", m4a1: "M4A4", m4a1_silencer: "M4A1-S", awp: "AWP", ssg08: "SSG 08", usp_silencer: "USP-S",
+  hkp2000: "P2000", glock: "Glock-18", deagle: "Desert Eagle", galilar: "Galil AR", famas: "FAMAS", aug: "AUG", sg556: "SG 553",
+  mac10: "MAC-10", mp9: "MP9", mp7: "MP7", ump45: "UMP-45", p90: "P90", bizon: "PP-Bizon", mp5sd: "MP5-SD", nova: "Nova",
+  xm1014: "XM1014", mag7: "MAG-7", sawedoff: "Sawed-Off", negev: "Negev", m249: "M249", p250: "P250", fiveseven: "Five-SeveN",
+  tec9: "Tec-9", cz75a: "CZ75-Auto", elite: "Dual Berettas", revolver: "R8 Revolver", hegrenade: "HE grenade", inferno: "Fire",
+  molotov: "Molotov", incgrenade: "Incendiary", planted_c4: "Bomb", taser: "Zeus", g3sg1: "G3SG1", scar20: "SCAR-20",
+  world: "World", flashbang: "Flashbang", smokegrenade: "Smoke", decoy: "Decoy" };
+const wname = (w) => WNAME[w] || (w && (w.includes("knife") || w.includes("bayonet")) ? "Knife" : w || "");
+const DEFS = { 1: "deagle", 2: "elite", 3: "fiveseven", 4: "glock", 7: "ak47", 8: "aug", 9: "awp", 10: "famas", 11: "g3sg1",
+  13: "galilar", 14: "m249", 16: "m4a1", 17: "mac10", 19: "p90", 23: "mp5sd", 24: "ump45", 25: "xm1014", 26: "bizon",
+  27: "mag7", 28: "negev", 29: "sawedoff", 30: "tec9", 31: "taser", 32: "hkp2000", 33: "mp7", 34: "mp9", 35: "nova",
+  36: "p250", 38: "scar20", 39: "sg556", 40: "ssg08", 43: "flashbang", 44: "hegrenade", 45: "smokegrenade", 46: "molotov",
+  47: "decoy", 48: "incgrenade", 49: "c4", 60: "m4a1_silencer", 61: "usp_silencer", 63: "cz75a", 64: "revolver" };
+const defName = (d) => (d === 42 || d === 59 || (d >= 500 && d < 600) ? "Knife" : d === 49 ? "C4" : wname(DEFS[d] || ""));
+
+const BUY = { Pistol: ["P", "Pistol", "#8f9bb3"], Eco: ["E", "Eco", "#e05d5d"], SemiEco: ["SE", "Semi-eco", "#e8954a"],
+  Force: ["F", "Force buy", "#d9c64b"], FullBuy: ["FB", "Full buy", "#4fbf7a"] };
+const GKIND = { Smoke: ["Smoke", "#b8bec9"], Flashbang: ["Flashbang", "#f3f3f3"], HeGrenade: ["HE", "#ff5a5a"],
+  Molotov: ["Molotov", "#ff7a30"], Incendiary: ["Incendiary", "#ffa040"], Decoy: ["Decoy", "#8a8f99"] };
+const isFire = (k) => k === "Molotov" || k === "Incendiary";
+
+/* ---------- players, teams ---------- */
+const P = new Map(S.players.map((p) => [p.steam_id, p]));
+const nameOf = (id) => (P.get(id) || {}).name || "?";
+const teams = [...S.teams].sort((a, b) => b.score - a.score);
+const TA = teams[0] || { name: "Team A", score: 0 }, TB = teams[1] || { name: "Team B", score: 0 };
+const teamKey = (name) => (name === TA.name ? "a" : name === TB.name ? "b" : "");
+const teamColor = (name) => (teamKey(name) === "a" ? css("--a") : teamKey(name) === "b" ? css("--b") : css("--muted"));
+const playersOf = (t) => S.players.filter((p) => p.team_name === t.name);
+const roundByNumber = new Map(S.rounds.map((r) => [r.number, r]));
+const lastTick = Math.max(0, ...S.rounds.map((r) => r.end_tick || r.start_tick));
+
+function rates(s) {
+  const r = s.rounds_played || 0;
+  if (!r) return { adr: 0, kpr: 0, dpr: 0, apr: 0, kast: 0, hs: 0, rating: 0, impact: 0, rating2: 0 };
+  const kpr = s.kills / r, dpr = s.deaths / r, apr = s.assists / r, adr = s.damage / r, kast = s.kast_rounds / r;
+  const m = s.multi_kills || [0, 0, 0, 0, 0, 0];
+  const rmk = (m[1] + 4 * m[2] + 9 * m[3] + 16 * m[4] + 25 * m[5]) / r / 1.277;
+  const rating = (kpr / 0.679 + 0.7 * ((r - s.deaths) / r / 0.317) + rmk) / 2.7;
+  const impact = 2.13 * kpr + 0.42 * apr - 0.41;
+  const rating2 = 0.0073 * kast * 100 + 0.3591 * kpr - 0.5329 * dpr + 0.2372 * impact + 0.0032 * adr + 0.1587;
+  return { adr, kpr, dpr, apr, kast, hs: ratio(s.headshot_kills, s.kills), rating, impact, rating2 };
+}
+
+function how(r) {
+  const k = typeof r.reason === "string" ? r.reason : r.reason ? "Other" : null;
+  switch (k) {
+    case "TargetBombed": return ["Bomb exploded", "✹"];
+    case "BombDefused": return ["Bomb defused", "✂"];
+    case "TargetSaved": return ["Time ran out", "◷"];
+    case "TWin": case "CtWin": return [r.bomb_planted ? "Elimination, bomb planted" : "Elimination", "✕"];
+    case "TerroristsSurrender": case "CtSurrender": return ["Surrender", "⚑"];
+    case null: return ["?", "?"];
+    default: return ["Other", "•"];
+  }
+}
+const roundTime = (r, tick) => (r.freeze_end_tick != null ? (tick - r.freeze_end_tick) / TR : (tick - r.start_tick) / TR);
+
+/* ---------- header ---------- */
+document.title = `${TA.name} vs ${TB.name} · ${S.map}`;
+$("#head").append(
+  h("div", { class: "scoreline" },
+    h("span", { class: "dot", style: `background:${css("--a")};width:14px;height:14px` }),
+    h("span", { class: "team" }, TA.name), h("span", { class: "score" }, TA.score),
+    h("span", { class: "dash" }, "–"), h("span", { class: "score" }, TB.score), h("span", { class: "team" }, TB.name),
+    h("span", { class: "dot", style: `background:${css("--b")};width:14px;height:14px` })),
+  h("div", { class: "sub" },
+    h("span", null, S.map), M.server ? h("span", null, M.server) : null,
+    M.duration ? h("span", null, "recording " + mmss(M.duration)) : null,
+    h("span", null, `${S.rounds.length} rounds`), M.build ? h("span", null, `build ${M.build}`) : null,
+    M.file ? h("span", null, M.file) : null));
+
+/* ---------- highlights ---------- */
+(function highlights() {
+  const ps = S.players.filter((p) => p.rounds_played > 0);
+  if (!ps.length) return;
+  const best = (f) => ps.reduce((a, b) => (f(b) > f(a) ? b : a));
+  const card = (label, p, num, what) =>
+    h("div", { class: "card hl" }, h("div", { class: "label" }, label),
+      h("div", { class: "who" }, h("span", { class: "dot", style: `background:${teamColor(p.team_name)};margin-right:6px` }), p.name),
+      h("div", { class: "num" }, num), h("div", { class: "what" }, what));
+  const top = best((p) => rates(p).rating);
+  const adr = best((p) => rates(p).adr);
+  const entry = best((p) => p.opening_kills - p.opening_deaths * 0.5);
+  const clutch = best((p) => p.clutches_won * 10 + p.clutches * 0.1);
+  const util = best((p) => p.utility_damage + p.enemies_flashed * 10);
+  const aimers = ps.filter((p) => p.aim && p.aim.hits >= 40);
+  const aim = aimers.length ? aimers.reduce((a, b) => (ratio(b.aim.head_hits, b.aim.hits) > ratio(a.aim.head_hits, a.aim.hits) ? b : a)) : null;
+  $("#highlights").append(
+    card("Best rating", top, rates(top).rating.toFixed(2), `${top.kills}–${top.deaths} K–D, KAST ${pct(top.kast_rounds, top.rounds_played)}`),
+    card("Most damage", adr, rates(adr).adr.toFixed(1) + " ADR", `${adr.damage} damage in ${adr.rounds_played} rounds`),
+    card("Opening duels", entry, `${entry.opening_kills}–${entry.opening_deaths}`, "first kills – first deaths"),
+    card("Clutches", clutch, `${clutch.clutches_won} / ${clutch.clutches}`, "won / entered"),
+    card("Utility", util, util.utility_damage + " dmg", `${util.enemies_flashed} enemies flashed`),
+    aim ? card("Head hits", aim, pct(aim.aim.head_hits, aim.aim.hits), `of ${aim.aim.hits} hits, accuracy ${pct(aim.aim.hits, aim.aim.shots)}`) : null);
+})();
+
+/* ---------- sortable tables ---------- */
+function table(columns, rows, sortKey, desc = true) {
+  let key = sortKey, down = desc;
+  const box = h("div", { class: "tablewrap" });
+  const render = () => {
+    const col = columns.find((c) => c.key === key);
+    const sorted = [...rows];
+    if (col && col.sort !== false) {
+      sorted.sort((a, b) => {
+        const x = col.value(a), y = col.value(b);
+        const d = typeof x === "string" ? String(x).localeCompare(y) : (x ?? -1e9) - (y ?? -1e9);
+        return down ? -d : d;
+      });
+    }
+    const head = h("tr", null, columns.map((c) => h("th", {
+      title: c.title, class: c.key === key ? "sorted" + (down ? "" : " asc") : null, style: c.align ? `text-align:${c.align}` : null,
+      onclick: () => { if (key === c.key) down = !down; else { key = c.key; down = c.key !== "name"; } render(); },
+    }, c.label)));
+    const body = sorted.map((r) => h("tr", null, columns.map((c) => h("td", { class: c.cls ? c.cls(r) : null, style: c.align ? `text-align:${c.align}` : null }, c.show ? c.show(r) : c.value(r)))));
+    box.replaceChildren(h("table", null, h("thead", null, head), h("tbody", null, body)));
+  };
+  render();
+  return box;
+}
+const nameCell = (p) => h("span", null, h("span", { class: "dot", style: `background:${teamColor(p.team_name)};margin-right:7px` }), p.name);
+
+/* ---------- scoreboard ---------- */
+(function scoreboard() {
+  let side = "all";
+  const seg = $("#sbside");
+  const render = () => {
+    seg.replaceChildren(...[["all", "Both sides"], ["t", "T side"], ["ct", "CT side"]].map(([k, l]) =>
+      h("button", { class: side === k ? "on" : null, onclick: () => { side = k; render(); } }, l)));
+    const box = $("#sbtables");
+    box.replaceChildren();
+    for (const t of [TA, TB]) {
+      const rows = playersOf(t).map((p) => {
+        const s = side === "all" ? p : p[side];
+        return { p, s, r: rates(s) };
+      });
+      const cols = [
+        { key: "name", label: "Player", value: (x) => x.p.name, show: (x) => nameCell(x.p) },
+        { key: "k", label: "K", value: (x) => x.s.kills },
+        { key: "d", label: "D", value: (x) => x.s.deaths },
+        { key: "a", label: "A", value: (x) => x.s.assists },
+        { key: "pm", label: "+/−", value: (x) => x.s.kills - x.s.deaths, show: (x) => { const v = x.s.kills - x.s.deaths; return (v > 0 ? "+" : "") + v; }, cls: (x) => (x.s.kills - x.s.deaths > 0 ? "good" : x.s.kills - x.s.deaths < 0 ? "bad" : null) },
+        { key: "adr", label: "ADR", title: "Average damage per round", value: (x) => x.r.adr, show: (x) => x.r.adr.toFixed(1) },
+        { key: "kast", label: "KAST", title: "Rounds with a kill, assist, survival or trade", value: (x) => x.r.kast, show: (x) => Math.round(x.r.kast * 100) + "%" },
+        { key: "hs", label: "HS %", value: (x) => x.r.hs, show: (x) => Math.round(x.r.hs * 100) + "%" },
+        { key: "op", label: "Opening", title: "Opening kills – opening deaths", value: (x) => x.s.opening_kills - x.s.opening_deaths, show: (x) => `${x.s.opening_kills}–${x.s.opening_deaths}` },
+        { key: "tr", label: "Trades", title: "Kills that traded a teammate", value: (x) => x.s.trade_kills },
+        { key: "mk", label: "3K+", title: "Rounds with 3 or more kills", value: (x) => x.s.multi_kills[3] + x.s.multi_kills[4] + x.s.multi_kills[5] },
+        side === "all" ? { key: "cl", label: "Clutches", title: "Clutches won / entered", value: (x) => x.p.clutches_won * 100 + x.p.clutches, show: (x) => `${x.p.clutches_won}/${x.p.clutches}` } : null,
+        { key: "imp", label: "Impact*", title: "Community approximation of HLTV Impact", value: (x) => x.r.impact, show: (x) => x.r.impact.toFixed(2) },
+        { key: "r2", label: "Rating 2.0*", title: "Community approximation of HLTV Rating 2.0", value: (x) => x.r.rating2, show: (x) => x.r.rating2.toFixed(2) },
+        { key: "r1", label: "Rating 1.0", title: "HLTV Rating 1.0 (published formula)", value: (x) => x.r.rating, show: (x) => h("b", null, x.r.rating.toFixed(2)) },
+      ].filter(Boolean);
+      const sideNote = side === "all" ? "" : ` · ${rows.reduce((a, x) => a + x.s.rounds_won, 0) / Math.max(1, rows.length) | 0} rounds won as ${SIDE_LABEL[side]}`;
+      box.append(h("div", { class: "teamhead" }, h("span", { class: "dot", style: `background:${teamColor(t.name)}` }), t.name,
+        h("span", { class: "muted", style: "font-weight:400" }, `${t.score} rounds · first half ${t.score_first_half}, second half ${t.score_second_half}${t.score_overtime ? ", overtime " + t.score_overtime : ""}${sideNote}`)),
+        table(cols, rows, "r1"));
+    }
+    box.append(h("p", { class: "muted", style: "margin:10px 0 0;font-size:12px" }, "* Approximations: HLTV has not published the Impact and Rating 2.0 formulas."));
+  };
+  render();
+})();
+
+/* ---------- rounds ---------- */
+let selectedRound = S.rounds.length ? S.rounds[0].number : null;
+const roundListeners = [];
+function selectRound(n, scroll) {
+  selectedRound = n;
+  if (scroll) { view.mode = "replay"; view.lineup = -1; }
+  for (const f of roundListeners) f(n);
+  if (scroll) document.getElementById("map").scrollIntoView();
+}
+
+(function rounds() {
+  const strip = $("#strip");
+  const cells = new Map();
+  let prev = null;
+  for (const r of S.rounds) {
+    const sideA = r.t_name === TA.name ? "Terrorist" : r.ct_name === TA.name ? "CounterTerrorist" : null;
+    if (prev && prev !== sideA) strip.append(h("div", { class: "half", title: "Sides switch" }));
+    prev = sideA;
+    const [label, icon] = how(r);
+    const ecoA = sideA ? (sideA === "Terrorist" ? r.t_economy : r.ct_economy) : null;
+    const ecoB = sideA ? (sideA === "Terrorist" ? r.ct_economy : r.t_economy) : null;
+    const buy = (e) => (e && BUY[e.buy] ? h("div", { class: "buy", style: `background:${BUY[e.buy][2]}`, title: BUY[e.buy][1] }, BUY[e.buy][0]) : h("div", { class: "buy" }, " "));
+    const cell = h("div", {
+      class: "round", title: `Round ${r.number}: ${r.winner_name || "?"} (${SIDE_LABEL[sideOf(r.winner)] || "?"}) · ${label}`,
+      onclick: () => selectRound(r.number),
+    }, h("div", { class: "n" }, r.number), buy(ecoA),
+      h("div", { class: "w", style: `background:${teamColor(r.winner_name)}` }, icon), buy(ecoB));
+    cells.set(r.number, cell);
+    strip.append(cell);
+  }
+  $("#striplegend").append(
+    h("span", null, "Top row: ", TA.name, " buy · bottom row: ", TB.name, " buy"),
+    ...Object.values(BUY).map(([a, l, c]) => h("span", null, h("i", { class: "dot", style: `background:${c}` }), `${a} = ${l}`)),
+    h("span", null, "✕ elimination · ✹ bomb exploded · ✂ defused · ◷ time"));
+
+  const detail = $("#rdetail");
+  const render = (n) => {
+    for (const [k, c] of cells) c.classList.toggle("sel", k === n);
+    const r = roundByNumber.get(n);
+    if (!r) { detail.replaceChildren(); return; }
+    const [label] = how(r);
+    const ecoRow = (side) => {
+      const e = side === "t" ? r.t_economy : r.ct_economy;
+      const name = side === "t" ? r.t_name : r.ct_name;
+      if (!e) return [h("div", null, name), h("div", { class: "muted" }, "no economy (round started before the recording)")];
+      return [h("div", { class: side }, `${name} (${SIDE_LABEL[side]})`),
+        h("div", null, h("b", { style: `color:${BUY[e.buy][2]}` }, BUY[e.buy][1]), ` · equipment $${e.equipment_value.toLocaleString()} · started with $${e.money_start.toLocaleString()} · spent $${e.cash_spent.toLocaleString()}`)];
+    };
+    const clutches = S.clutches.filter((c) => c.round === n);
+    const kills = S.kills.filter((k) => k.round === n);
+    const dur = r.end_tick != null ? roundTime(r, r.end_tick) : null;
+    detail.replaceChildren(
+      h("div", null,
+        h("h2", { style: "margin-bottom:8px" }, `Round ${n}`, h("small", null, `${r.winner_name || "?"} wins as ${SIDE_LABEL[sideOf(r.winner)] || "?"}`)),
+        h("div", { class: "kv" },
+          h("div", null, "How"), h("div", null, label + (dur != null ? ` · ${mmss(dur)} into the round` : "")),
+          h("div", null, "Score"), h("div", null, `${r.t_name} ${r.score_t} – ${r.score_ct} ${r.ct_name}`),
+          ...ecoRow("t"), ...ecoRow("ct"),
+          h("div", null, "Bomb"), h("div", null, r.bomb_planted
+            ? `planted on ${r.bomb_site || "?"} by ${nameOf(r.bomb_planter)} at ${mmss(roundTime(r, r.bomb_plant_tick))}` + (r.bomb_defused ? ", defused" : r.bomb_exploded ? ", exploded" : "")
+            : "not planted"),
+          h("div", null, "Clutch"), h("div", null, clutches.length ? clutches.map((c) => `${c.name} 1v${c.opponents} (${c.kills} kill${c.kills === 1 ? "" : "s"}, ${c.won ? "won" : "lost"})`).join(" · ") : "none")),
+        h("div", { style: "margin-top:12px" }, h("button", { class: "btn", onclick: () => selectRound(n, true) }, "▶ Watch this round"))),
+      h("div", null, h("ul", { class: "feed" }, kills.length ? kills.map(killLine) : h("li", { class: "muted" }, "No kills"))));
+  };
+  roundListeners.push(render);
+  render(selectedRound);
+})();
+
+function killLine(k) {
+  const tags = [];
+  if (k.headshot) tags.push("HS");
+  if (k.wallbang) tags.push("wallbang");
+  if (k.through_smoke) tags.push("through smoke");
+  if (k.noscope) tags.push("no-scope");
+  if (k.attacker_blind) tags.push("blind");
+  if (k.team_kill) tags.push("team kill");
+  if (k.traded) tags.push("traded");
+  return h("li", null, h("span", { class: "time" }, k.round_time != null ? mmss(k.round_time) : ""),
+    k.attacker_name ? h("b", { class: sideOf(k.attacker_side) }, k.attacker_name) : null,
+    h("span", { class: "muted" }, k.attacker_name ? wname(k.weapon) : "died"),
+    h("b", { class: sideOf(k.victim_side) }, k.victim_name),
+    ...tags.map((t) => h("span", { class: "tag" }, t)),
+    k.attacker_place ? h("span", { class: "muted", style: "font-size:12px" }, "@ " + k.attacker_place) : null);
+}
+
+/* ---------- economy chart ---------- */
+(function economy() {
+  const svg = $("#eco");
+  const rs = S.rounds;
+  if (!rs.length) return;
+  const W = 1200, H = 260, L = 50, Rm = 12, T = 12, B = 30;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const eq = (r, team) => {
+    const e = r.t_name === team.name ? r.t_economy : r.ct_name === team.name ? r.ct_economy : null;
+    return e;
+  };
+  const max = Math.max(5000, ...rs.flatMap((r) => [eq(r, TA), eq(r, TB)].filter(Boolean).map((e) => e.equipment_value)));
+  const top = Math.ceil(max / 5000) * 5000;
+  const x = (i) => L + ((W - L - Rm) * (i + 0.5)) / rs.length;
+  const y = (v) => T + (H - T - B) * (1 - v / top);
+  const bw = (W - L - Rm) / rs.length;
+  for (let v = 0; v <= top; v += 5000) {
+    svg.append(svgEl("line", { x1: L, x2: W - Rm, y1: y(v), y2: y(v), stroke: "currentColor", "stroke-opacity": 0.12 }),
+      svgEl("text", { x: L - 6, y: y(v) + 4, "text-anchor": "end" }, v ? `$${v / 1000}k` : "0"));
+  }
+  rs.forEach((r, i) => {
+    svg.append(svgEl("rect", { x: x(i) - bw / 2 + 1, y: T, width: bw - 2, height: H - T - B, fill: teamColor(r.winner_name), "fill-opacity": 0.09 }));
+    svg.append(svgEl("text", { x: x(i), y: H - 10, "text-anchor": "middle" }, r.number));
+  });
+  for (const team of [TA, TB]) {
+    const pts = rs.map((r, i) => [i, eq(r, team)]).filter(([, e]) => e);
+    const col = teamColor(team.name);
+    svg.append(svgEl("polyline", { points: pts.map(([i, e]) => `${x(i)},${y(e.equipment_value)}`).join(" "), fill: "none", stroke: col, "stroke-width": 2.2 }));
+    for (const [i, e] of pts) {
+      const r = rs[i];
+      const c = svgEl("circle", { cx: x(i), cy: y(e.equipment_value), r: 5.5, fill: BUY[e.buy][2], stroke: col, "stroke-width": 2, style: "cursor:pointer" });
+      c.append(svgEl("title", null, `Round ${r.number} · ${team.name} (${SIDE_LABEL[sideOf(e.side)]}): ${BUY[e.buy][1]}\nEquipment $${e.equipment_value.toLocaleString()} · start $${e.money_start.toLocaleString()} · spent $${e.cash_spent.toLocaleString()}\nLoss streak ${e.loss_streak} · ${r.winner_name === team.name ? "won" : "lost"} the round`));
+      c.addEventListener("click", () => selectRound(r.number));
+      svg.append(c);
+    }
+  }
+  svg.style.color = css("--muted");
+  const buyStats = (team) => {
+    const s = {};
+    for (const r of rs) {
+      const e = eq(r, team);
+      if (!e) continue;
+      s[e.buy] = s[e.buy] || [0, 0];
+      s[e.buy][0]++;
+      if (r.winner_name === team.name) s[e.buy][1]++;
+    }
+    return Object.entries(s).map(([b, [n, w]]) => `${BUY[b][1]} ${w}/${n}`).join(", ");
+  };
+  $("#ecolegend").append(
+    h("span", null, h("i", { class: "dot", style: `background:${css("--a")}` }), `${TA.name}: ${buyStats(TA)}`),
+    h("span", null, h("i", { class: "dot", style: `background:${css("--b")}` }), `${TB.name}: ${buyStats(TB)}`),
+    h("span", null, "rounds won by buy · shaded columns: round winner"));
+})();
+
+/* ---------- radar ---------- */
+const canvas = $("#radar"), g = canvas.getContext("2d"), tip = $("#tip");
+let zoom = 1, panX = 0, panY = 0;
+const allPoints = [];
+for (const k of S.kills) { if (k.attacker_pos) allPoints.push(k.attacker_pos); if (k.victim_pos) allPoints.push(k.victim_pos); }
+for (const r of S.rounds) for (const s of r.setup) allPoints.push(s.pos);
+for (const f of R.frames) for (const p of f[1]) allPoints.push([p[1], p[2], p[3]]);
+let toPx;
+if (OV) {
+  toPx = (p) => [(p[0] - OV.pos_x) / OV.scale, (OV.pos_y - p[1]) / OV.scale];
+} else {
+  // No calibration: fit the positions to the square.
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const p of allPoints) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+  if (!isFinite(x0)) { x0 = -1000; x1 = 1000; y0 = -1000; y1 = 1000; }
+  const span = Math.max(x1 - x0, y1 - y0) * 1.08 || 1, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  toPx = (p) => [((p[0] - cx) / span + 0.5) * 1024, ((cy - p[1]) / span + 0.5) * 1024];
+}
+const unitsToPx = (u) => (OV ? u / OV.scale : u / 4);
+const hasLower = !!(OV && OV.lower_below != null);
+let level = "upper";
+const onLevel = (p) => !hasLower || !p || (level === "lower") === (p[2] < OV.lower_below);
+
+const images = {};
+for (const [k, src] of [["upper", M.radar], ["lower", M.radar_lower]]) {
+  if (!src) continue;
+  const img = new Image();
+  img.onload = () => draw();
+  img.src = src;
+  images[k] = img;
+}
+const sketches = {};
+function sketch() {
+  if (sketches[level]) return sketches[level];
+  const c = document.createElement("canvas");
+  c.width = c.height = 1024;
+  const x = c.getContext("2d");
+  x.fillStyle = "rgba(160,172,196,0.05)";
+  for (const f of R.frames) for (const p of f[1]) {
+    if (!(p[8] & 1)) continue;
+    const w = [p[1], p[2], p[3]];
+    if (!onLevel(w)) continue;
+    const [px, py] = toPx(w);
+    x.fillRect(px - 1.5, py - 1.5, 3, 3);
+  }
+  sketches[level] = c;
+  return c;
+}
+// Bomb site labels from where bombs were planted.
+const sites = (() => {
+  const acc = {};
+  for (const r of S.rounds) {
+    if (!r.bomb_site || r.bomb_plant_tick == null) continue;
+    const f = R.frames.find((f) => f[0] >= r.bomb_plant_tick && f[2] && f[2][3] === 1);
+    if (!f || f[0] > (r.end_tick ?? Infinity)) continue;
+    const a = (acc[r.bomb_site] = acc[r.bomb_site] || [0, 0, 0, 0]);
+    a[0] += f[2][0]; a[1] += f[2][1]; a[2] += f[2][2]; a[3]++;
+  }
+  return Object.entries(acc).map(([s, a]) => ({ site: s, pos: [a[0] / a[3], a[1] / a[3], a[2] / a[3]] }));
+})();
+
+function resizeCanvas() {
+  const box = $("#canvasbox");
+  const size = Math.max(280, Math.min(box.clientWidth || 860, 860));
+  const dpr = window.devicePixelRatio || 1;
+  canvas.style.width = size + "px";
+  canvas.style.height = size + "px";
+  canvas.width = Math.round(size * dpr);
+  canvas.height = Math.round(size * dpr);
+  draw();
+}
+const kpx = () => canvas.width / 1024;
+function screenToLogical(ev) {
+  const r = canvas.getBoundingClientRect(), dpr = canvas.width / r.width;
+  return [((ev.clientX - r.left) * dpr / kpx() - panX) / zoom, ((ev.clientY - r.top) * dpr / kpx() - panY) / zoom];
+}
+canvas.addEventListener("wheel", (ev) => {
+  ev.preventDefault();
+  const [lx, ly] = screenToLogical(ev);
+  const nz = Math.min(8, Math.max(1, zoom * (ev.deltaY < 0 ? 1.2 : 1 / 1.2)));
+  const r = canvas.getBoundingClientRect(), dpr = canvas.width / r.width;
+  panX = (ev.clientX - r.left) * dpr / kpx() - nz * lx;
+  panY = (ev.clientY - r.top) * dpr / kpx() - nz * ly;
+  zoom = nz;
+  if (zoom === 1) { panX = 0; panY = 0; }
+  draw();
+}, { passive: false });
+let drag = null;
+canvas.addEventListener("pointerdown", (ev) => { drag = [ev.clientX, ev.clientY, panX, panY]; canvas.classList.add("drag"); canvas.setPointerCapture(ev.pointerId); });
+canvas.addEventListener("pointerup", () => { drag = null; canvas.classList.remove("drag"); });
+canvas.addEventListener("dblclick", () => { zoom = 1; panX = 0; panY = 0; draw(); });
+canvas.addEventListener("pointermove", (ev) => {
+  if (drag) {
+    const r = canvas.getBoundingClientRect(), dpr = canvas.width / r.width;
+    panX = drag[2] + (ev.clientX - drag[0]) * dpr / kpx();
+    panY = drag[3] + (ev.clientY - drag[1]) * dpr / kpx();
+    draw();
+    return;
+  }
+  hover(ev);
+});
+canvas.addEventListener("pointerleave", () => { tip.style.display = "none"; });
+
+const view = { mode: "replay", player: "", side: "", kind: "", round: "all", lineup: -1 };
+let hoverItems = [];
+
+function begin() {
+  const k = kpx();
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.fillStyle = "#0a0c10";
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.setTransform(k * zoom, 0, 0, k * zoom, panX * k, panY * k);
+  const img = images[level];
+  if (img && img.complete && img.naturalWidth) g.drawImage(img, 0, 0, 1024, 1024);
+  else g.drawImage(sketch(), 0, 0);
+  g.font = `700 ${34 / zoom}px system-ui, sans-serif`;
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  for (const s of sites) {
+    if (!onLevel(s.pos)) continue;
+    const [x, y] = toPx(s.pos);
+    g.fillStyle = "rgba(255,255,255,0.18)";
+    g.fillText(s.site, x, y);
+  }
+}
+const px1 = () => 1 / zoom; // one screen-ish pixel in logical units
+function circle(x, y, r, fill, stroke, lw) {
+  g.beginPath();
+  g.arc(x, y, r, 0, Math.PI * 2);
+  if (fill) { g.fillStyle = fill; g.fill(); }
+  if (stroke) { g.strokeStyle = stroke; g.lineWidth = lw || px1(); g.stroke(); }
+}
+function cross(x, y, r, color, lw) {
+  g.strokeStyle = color;
+  g.lineWidth = lw || 2.5 * px1();
+  g.beginPath();
+  g.moveTo(x - r, y - r); g.lineTo(x + r, y + r);
+  g.moveTo(x + r, y - r); g.lineTo(x - r, y + r);
+  g.stroke();
+}
+function withAlpha(hex, a) {
+  if (!hex || hex[0] !== "#") return hex;
+  const n = parseInt(hex.length === 4 ? hex.slice(1).split("").map((c) => c + c).join("") : hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+function inFilter(round, side, ids) {
+  if (view.round !== "all" && round !== Number(view.round)) return false;
+  if (view.side && sideOf(side) !== view.side) return false;
+  if (view.player && !ids.includes(view.player)) return false;
+  return true;
+}
+
+function drawKills() {
+  hoverItems = [];
+  for (const k of S.kills) {
+    if (!k.victim_pos || !inFilter(k.round, k.attacker_side || k.victim_side, [k.attacker, k.victim])) continue;
+    if (!onLevel(k.victim_pos)) continue;
+    const [vx, vy] = toPx(k.victim_pos);
+    if (k.attacker_pos && !k.team_kill) {
+      const [ax, ay] = toPx(k.attacker_pos);
+      g.strokeStyle = withAlpha(sideColor(k.attacker_side), 0.55);
+      g.lineWidth = 1.6 * px1();
+      g.beginPath(); g.moveTo(ax, ay); g.lineTo(vx, vy); g.stroke();
+      circle(ax, ay, 5 * px1(), sideColor(k.attacker_side), "#0008");
+    }
+    cross(vx, vy, 5 * px1(), sideColor(k.victim_side));
+    hoverItems.push({ x: vx, y: vy, html: () => `<b>${esc(k.attacker_name || "World")}</b> → <b>${esc(k.victim_name)}</b><br>${esc(wname(k.weapon))}${k.headshot ? " · HS" : ""}${k.wallbang ? " · wallbang" : ""} · round ${k.round} ${k.round_time != null ? "@ " + mmss(k.round_time) : ""}${k.distance ? `<br>${Math.round(k.distance)} units` : ""}${k.attacker_place ? `<br>from ${esc(k.attacker_place)}` : ""}` });
+  }
+  legend([["Killer (side color)", "dot"], ["Victim", "x"]]);
+}
+
+function landRadius(kind) {
+  return kind === "Smoke" ? unitsToPx(144) : isFire(kind) ? unitsToPx(110) : kind === "HeGrenade" ? unitsToPx(60) : unitsToPx(40);
+}
+function drawGrenade(gr, alpha, full) {
+  const [, col] = GKIND[gr.kind] || ["", "#fff"];
+  const tr = gr.trajectory || [];
+  if (full && tr.length > 1) {
+    g.strokeStyle = withAlpha(col, 0.35 * alpha);
+    g.lineWidth = 1.2 * px1();
+    g.beginPath();
+    tr.forEach((p, i) => { const [x, y] = toPx(p); if (i) g.lineTo(x, y); else g.moveTo(x, y); });
+    g.stroke();
+  }
+  if (full) { const [tx, ty] = toPx(gr.throw_pos); circle(tx, ty, 3 * px1(), withAlpha(col, 0.9 * alpha)); }
+  const land = gr.detonate_pos || tr[tr.length - 1];
+  if (land) {
+    const [lx, ly] = toPx(land);
+    if (gr.kind === "Smoke" || isFire(gr.kind)) circle(lx, ly, landRadius(gr.kind), withAlpha(col, 0.18 * alpha), withAlpha(col, 0.6 * alpha));
+    else circle(lx, ly, 5 * px1(), withAlpha(col, 0.85 * alpha), "#0009");
+    return [lx, ly];
+  }
+  return null;
+}
+function grenadeHtml(gr) {
+  const lines = [`<b>${esc(GKIND[gr.kind][0])}</b> by <b>${esc(gr.thrower_name)}</b> (${SIDE_LABEL[sideOf(gr.side)] || "?"})`,
+    `round ${gr.round}${gr.throw_round_time != null ? " @ " + mmss(gr.throw_round_time) : ""}${gr.throw_place ? " · from " + esc(gr.throw_place) : ""}`];
+  if (gr.jump_throw) lines.push("jump throw");
+  if (gr.kind === "Flashbang") {
+    const en = gr.blinded.filter((b) => !b.teammate), tm = gr.blinded.filter((b) => b.teammate);
+    lines.push(`blinded ${en.length} enem${en.length === 1 ? "y" : "ies"} (${en.reduce((a, b) => a + b.duration, 0).toFixed(1)} s)` + (tm.length ? `, ${tm.length} teammate${tm.length > 1 ? "s" : ""}` : "") + (gr.flash_led_to_kill ? " · led to a kill" : ""));
+  } else if (gr.kind === "HeGrenade" || isFire(gr.kind)) {
+    lines.push(`${gr.enemy_damage} damage to enemies` + (gr.team_damage ? `, ${gr.team_damage} to teammates` : ""));
+  }
+  if (gr.detonate_tick != null && gr.end_tick != null && (gr.kind === "Smoke" || isFire(gr.kind))) lines.push(`lasted ${((gr.end_tick - gr.detonate_tick) / TR).toFixed(1)} s`);
+  if (gr.dropped) lines.push("dropped by a dying player");
+  return lines.join("<br>");
+}
+function drawGrenades() {
+  hoverItems = [];
+  for (const gr of S.grenades) {
+    if (view.kind && !(view.kind === "Fire" ? isFire(gr.kind) : gr.kind === view.kind)) continue;
+    if (!inFilter(gr.round, gr.side, [gr.thrower])) continue;
+    const land = gr.detonate_pos || gr.trajectory[gr.trajectory.length - 1];
+    if (!onLevel(land || gr.throw_pos)) continue;
+    const at = drawGrenade(gr, 1, true);
+    if (at) hoverItems.push({ x: at[0], y: at[1], html: () => grenadeHtml(gr) });
+  }
+  legend(Object.values(GKIND).map(([l, c]) => [l, "dot", c]));
+}
+
+function drawLineups() {
+  hoverItems = [];
+  lineupRows().forEach(({ l, i }) => {
+    const [, col] = GKIND[l.kind];
+    const on = view.lineup === i;
+    if (view.lineup >= 0 && !on) g.globalAlpha = 0.25;
+    const [tx, ty] = toPx(l.throw_pos), [lx, ly] = toPx(l.land_pos);
+    g.strokeStyle = withAlpha(col, 0.7);
+    g.lineWidth = (on ? 2.5 : 1.4) * px1();
+    g.setLineDash([6 * px1(), 5 * px1()]);
+    g.beginPath(); g.moveTo(tx, ty); g.lineTo(lx, ly); g.stroke();
+    g.setLineDash([]);
+    if (l.kind === "Smoke" || isFire(l.kind)) circle(lx, ly, landRadius(l.kind), withAlpha(col, 0.16), withAlpha(col, 0.7));
+    else circle(lx, ly, 6 * px1(), col);
+    circle(tx, ty, 9 * px1(), withAlpha(sideColor(l.side), 0.95), "#000a");
+    g.fillStyle = "#111";
+    g.font = `700 ${11 / zoom}px system-ui`;
+    g.fillText(String(l.grenades.length), tx, ty + 0.5 * px1());
+    g.globalAlpha = 1;
+    hoverItems.push({ x: tx, y: ty, html: () => lineupHtml(l), click: () => { view.lineup = view.lineup === i ? -1 : i; renderSide(); draw(); } });
+  });
+  legend([["Throw spot (count)", "dot", css("--t")], ["Landing", "dot", GKIND.Smoke[1]]]);
+}
+function lineupRows() {
+  return LINEUPS.map((l, i) => ({ l, i })).filter(({ l }) =>
+    l.grenades.length > 1 &&
+    (!view.kind || (view.kind === "Fire" ? isFire(l.kind) : l.kind === view.kind)) &&
+    (!view.side || sideOf(l.side) === view.side) &&
+    (!view.player || l.throwers.includes(view.player)) &&
+    onLevel(l.throw_pos));
+}
+function lineupHtml(l) {
+  return `<b>${esc(GKIND[l.kind][0])}</b> · ${SIDE_LABEL[sideOf(l.side)] || "?"} · thrown ${l.grenades.length}×<br>` +
+    `${l.throw_place ? "from " + esc(l.throw_place) + "<br>" : ""}aim ${l.throw_angles[0].toFixed(1)}° pitch, ${l.throw_angles[1].toFixed(1)}° yaw${l.jump_throw ? " · jump throw" : ""}<br>` +
+    `by ${l.throwers.map((t) => esc(nameOf(t))).join(", ")}`;
+}
+
+function drawHeatmap() {
+  hoverItems = [];
+  const N = 256, grid = new Float32Array(N * N);
+  let max = 0;
+  for (const f of R.frames) {
+    const r = roundAt(f[0]);
+    if (!r || (view.round !== "all" && r.number !== Number(view.round))) continue;
+    // Live play only: not freeze time, not after the round ended.
+    if ((r.freeze_end_tick != null && f[0] < r.freeze_end_tick) || (r.end_tick != null && f[0] > r.end_tick)) continue;
+    for (const p of f[1]) {
+      if (!(p[8] & 1)) continue;
+      const id = R.players[p[0]];
+      if (view.player && id !== view.player) continue;
+      const line = r.players.find((l) => l.steam_id === id);
+      if (view.side && (!line || sideOf(line.side) !== view.side)) continue;
+      const w = [p[1], p[2], p[3]];
+      if (!onLevel(w)) continue;
+      const [x, y] = toPx(w);
+      const gx = (x / 4) | 0, gy = (y / 4) | 0;
+      if (gx < 0 || gy < 0 || gx >= N || gy >= N) continue;
+      grid[gy * N + gx] += 1;
+    }
+  }
+  // Two box blurs ≈ a Gaussian.
+  const blur = (src) => {
+    const out = new Float32Array(N * N), R2 = 3;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      let s = 0;
+      for (let d = -R2; d <= R2; d++) { const xx = x + d; if (xx >= 0 && xx < N) s += src[y * N + xx]; }
+      out[y * N + x] = s;
+    }
+    const out2 = new Float32Array(N * N);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      let s = 0;
+      for (let d = -R2; d <= R2; d++) { const yy = y + d; if (yy >= 0 && yy < N) s += out[yy * N + x]; }
+      out2[y * N + x] = s;
+    }
+    return out2;
+  };
+  const b = blur(blur(grid));
+  for (const v of b) max = Math.max(max, v);
+  const img = new ImageData(N, N);
+  for (let i = 0; i < N * N; i++) {
+    const v = max ? Math.sqrt(b[i] / max) : 0;
+    if (v < 0.02) continue;
+    // dark blue → cyan → yellow → red
+    const stops = [[0, [30, 60, 200]], [0.35, [40, 200, 220]], [0.65, [250, 220, 60]], [1, [240, 60, 40]]];
+    let c = stops[stops.length - 1][1];
+    for (let s = 1; s < stops.length; s++) if (v <= stops[s][0]) {
+      const [a0, c0] = stops[s - 1], [a1, c1] = stops[s], t = (v - a0) / (a1 - a0);
+      c = c0.map((x, k) => x + (c1[k] - x) * t);
+      break;
+    }
+    img.data.set([c[0], c[1], c[2], Math.min(255, 70 + 185 * v)], i * 4);
+  }
+  const off = document.createElement("canvas");
+  off.width = off.height = N;
+  off.getContext("2d").putImageData(img, 0, 0);
+  g.imageSmoothingEnabled = true;
+  g.drawImage(off, 0, 0, 1024, 1024);
+  legend([["Where living players spent the rounds (after freeze time), sampled every " + R.every + " ticks", ""]]);
+}
+
+/* ---------- replay ---------- */
+const roundFrames = new Map();
+function framesOf(r) {
+  if (roundFrames.has(r.number)) return roundFrames.get(r.number);
+  const end = (r.end_tick ?? lastTick) + 3 * TR;
+  const fr = R.frames.filter((f) => f[0] >= r.start_tick && f[0] <= end);
+  roundFrames.set(r.number, fr);
+  return fr;
+}
+function roundAt(tick) {
+  for (const r of S.rounds) if (tick >= r.start_tick && tick <= (r.end_tick ?? lastTick) + 3 * TR) return r;
+  return null;
+}
+const replay = { tick: 0, playing: false, speed: 2, last: 0 };
+function replayRound() { return roundByNumber.get(selectedRound) || S.rounds[0]; }
+function replayBounds(r) {
+  const fr = framesOf(r);
+  const start = r.freeze_end_tick != null ? Math.max(r.start_tick, r.freeze_end_tick - 3 * TR) : r.start_tick;
+  return [start, fr.length ? fr[fr.length - 1][0] : (r.end_tick ?? start)];
+}
+function lerpAngle(a, b, t) { let d = ((b - a + 540) % 360) - 180; return a + d * t; }
+function stateAt(r, tick) {
+  const fr = framesOf(r);
+  if (!fr.length) return { players: [], bomb: 0 };
+  let lo = 0, hi = fr.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (fr[mid][0] <= tick) lo = mid; else hi = mid - 1; }
+  const a = fr[lo], b = fr[Math.min(lo + 1, fr.length - 1)];
+  const t = b[0] > a[0] ? Math.min(1, Math.max(0, (tick - a[0]) / (b[0] - a[0]))) : 0;
+  const bmap = new Map(b[1].map((p) => [p[0], p]));
+  const players = a[1].map((p) => {
+    const q = bmap.get(p[0]);
+    if (!q || !(p[8] & 1) || !(q[8] & 1)) return p.slice();
+    return [p[0], p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t, p[3] + (q[3] - p[3]) * t, lerpAngle(p[4], q[4], t), p[5], p[6], p[7], p[8], p[9]];
+  });
+  return { players, bomb: a[2], frame: lo };
+}
+function grenadePos(gr, tick) {
+  const tr = gr.trajectory;
+  if (!tr || !tr.length) return null;
+  const f = (tick - gr.throw_tick) / 4;
+  if (f <= 0) return tr[0];
+  const i = Math.floor(f);
+  if (i >= tr.length - 1) return tr[tr.length - 1];
+  const t = f - i, a = tr[i], b = tr[i + 1];
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+function sideInRound(r, id) {
+  const l = r.players.find((x) => x.steam_id === id);
+  return l ? l.side : (P.get(id) || {}).team;
+}
+function drawReplay() {
+  hoverItems = [];
+  const r = replayRound();
+  if (!r) return;
+  const tick = replay.tick;
+  // Utility.
+  for (const gr of S.grenades) {
+    if (gr.round !== r.number) continue;
+    const det = gr.detonate_tick ?? Infinity;
+    const [, col] = GKIND[gr.kind] || ["", "#fff"];
+    if (tick >= gr.throw_tick && tick < det) {
+      const p = grenadePos(gr, tick);
+      if (p && onLevel(p)) { const [x, y] = toPx(p); circle(x, y, 4 * px1(), col, "#000a"); }
+    } else if (tick >= det && gr.detonate_pos && onLevel(gr.detonate_pos)) {
+      const [x, y] = toPx(gr.detonate_pos);
+      const end = gr.end_tick ?? det + (gr.kind === "Smoke" ? 22 * TR : isFire(gr.kind) ? 7 * TR : 0);
+      if ((gr.kind === "Smoke" || isFire(gr.kind)) && tick <= end) {
+        const fade = Math.min(1, (end - tick) / TR);
+        circle(x, y, landRadius(gr.kind), withAlpha(col, (gr.kind === "Smoke" ? 0.42 : 0.3) * fade), withAlpha(col, 0.7 * fade));
+      } else if ((gr.kind === "Flashbang" || gr.kind === "HeGrenade") && tick - det < 0.4 * TR) {
+        const k = (tick - det) / (0.4 * TR);
+        circle(x, y, (8 + 40 * k) * px1(), null, withAlpha(col, 1 - k), 3 * px1());
+      }
+    }
+  }
+  const st = stateAt(r, tick);
+  // Bomb.
+  if (st.bomb && st.bomb[4] < 0) {
+    const bp = [st.bomb[0], st.bomb[1], st.bomb[2]];
+    if (onLevel(bp)) {
+      const [x, y] = toPx(bp);
+      const pulse = st.bomb[3] ? 0.5 + 0.5 * Math.sin(tick / 6) : 1;
+      g.fillStyle = `rgba(255,60,60,${0.55 + 0.45 * pulse})`;
+      g.fillRect(x - 6 * px1(), y - 6 * px1(), 12 * px1(), 12 * px1());
+    }
+  }
+  // Deaths so far.
+  const deaths = S.kills.filter((k) => k.round === r.number && k.tick <= tick && k.victim_pos);
+  for (const k of deaths) if (onLevel(k.victim_pos)) { const [x, y] = toPx(k.victim_pos); cross(x, y, 6 * px1(), withAlpha(sideColor(k.victim_side), 0.8)); }
+  // Players.
+  g.textAlign = "center";
+  for (const p of st.players) {
+    if (!(p[8] & 1)) continue;
+    const id = R.players[p[0]];
+    const w = [p[1], p[2], p[3]];
+    if (!onLevel(w)) continue;
+    const [x, y] = toPx(w);
+    const col = sideColor(sideInRound(r, id));
+    const yaw = (p[4] * Math.PI) / 180;
+    g.strokeStyle = withAlpha(col, 0.9);
+    g.lineWidth = 2 * px1();
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(yaw) * 26 * px1(), y - Math.sin(yaw) * 26 * px1()); g.stroke();
+    circle(x, y, 9 * px1(), col, "#000c", 1.5 * px1());
+    // health ring
+    g.strokeStyle = "rgba(255,255,255,0.85)";
+    g.lineWidth = 2 * px1();
+    g.beginPath(); g.arc(x, y, 12 * px1(), -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * p[5]) / 100); g.stroke();
+    if (p[8] & 2) { g.fillStyle = "#ff3c3c"; g.fillRect(x + 8 * px1(), y - 14 * px1(), 7 * px1(), 7 * px1()); }
+    g.fillStyle = "#fff";
+    g.font = `600 ${12 / zoom}px system-ui`;
+    g.fillText(nameOf(id), x, y - 20 * px1());
+    hoverItems.push({ x, y, html: () => `<b>${esc(nameOf(id))}</b> · ${p[5]} HP${p[6] ? " · " + p[6] + " armor" : ""}<br>${esc(defName(p[7]))} · $${p[9]}` });
+  }
+  // Fresh kills: a line from killer to victim.
+  for (const k of deaths) {
+    if (tick - k.tick > 1.2 * TR || !k.attacker_pos || !k.victim_pos) continue;
+    const [ax, ay] = toPx(k.attacker_pos), [vx, vy] = toPx(k.victim_pos);
+    g.strokeStyle = `rgba(255,255,255,${1 - (tick - k.tick) / (1.2 * TR)})`;
+    g.lineWidth = 2 * px1();
+    g.beginPath(); g.moveTo(ax, ay); g.lineTo(vx, vy); g.stroke();
+  }
+  updateHud(r, st);
+}
+
+let hudKey = "";
+function updateHud(r, st) {
+  const box = $("#hud");
+  if (!box) return;
+  const key = r.number + ":" + st.frame + ":" + S.kills.filter((k) => k.round === r.number && k.tick <= replay.tick).length;
+  if (key === hudKey) return;
+  hudKey = key;
+  const byIdx = new Map(st.players.map((p) => [p[0], p]));
+  const col = (team) => {
+    const ids = S.players.filter((p) => p.team_name === team.name).map((p) => p.steam_id);
+    return h("div", { class: "hud" }, h("div", { class: "teamhead" }, h("span", { class: "dot", style: `background:${teamColor(team.name)}` }), team.name,
+      h("span", { class: sideOf(r.t_name === team.name ? "Terrorist" : "CounterTerrorist") }, SIDE_LABEL[sideOf(r.t_name === team.name ? "Terrorist" : "CounterTerrorist")])),
+    ids.map((id) => {
+      const i = R.players.indexOf(id), p = byIdx.get(i);
+      const alive = p && p[8] & 1, hp = p ? p[5] : 0;
+      const kills = S.kills.filter((k) => k.round === r.number && k.tick <= replay.tick && k.attacker === id && !k.team_kill).length;
+      return h("div", { class: "hudrow" + (alive ? "" : " dead") },
+        h("span", { class: "nm" }, nameOf(id), kills ? h("span", { class: "muted" }, ` · ${kills}K`) : null, p && p[8] & 2 ? h("span", { class: "tag", style: "margin-left:6px" }, "C4") : null, p && p[8] & 4 ? h("span", { class: "tag", style: "margin-left:6px" }, "kit") : null),
+        h("span", { class: "wp" }, alive ? `${defName(p[7])} · $${p[9]}` : "dead"),
+        h("div", { class: "hp" }, h("i", { style: `width:${alive ? hp : 0}%;background:${hp > 50 ? css("--good") : hp > 20 ? css("--warn") : css("--bad")}` })));
+    }));
+  };
+  const feed = S.kills.filter((k) => k.round === r.number && k.tick <= replay.tick).slice(-6);
+  box.replaceChildren(col(TA), col(TB),
+    h("div", null, h("div", { class: "muted", style: "font-size:12px;margin:4px 0" }, "Kills"), h("ul", { class: "feed" }, feed.length ? feed.map(killLine) : h("li", { class: "muted" }, "—"))));
+}
+
+/* ---------- map toolbar, side panel, timeline ---------- */
+function legend(items) {
+  const box = $("#legend");
+  if (!box) return;
+  box.replaceChildren(...items.map(([label, shape, color]) => h("span", null,
+    shape === "dot" ? h("i", { class: "dot", style: `background:${color || css("--t")}` }) : shape === "x" ? h("b", null, "✕") : null, label)));
+}
+const MODES = [["replay", "Replay"], ["kills", "Kills"], ["grenades", "Grenades"], ["lineups", "Lineups"], ["heatmap", "Positions"]];
+function renderTools() {
+  const tools = $("#maptools");
+  const opt = (v, l, sel) => h("option", { value: v, selected: sel ? true : null }, l);
+  const modeSeg = h("div", { class: "seg" }, MODES.map(([k, l]) => h("button", { class: view.mode === k ? "on" : null, onclick: () => { view.mode = k; view.lineup = -1; renderTools(); renderSide(); draw(); } }, l)));
+  const roundSel = h("select", { "aria-label": "Round", onchange: (e) => { if (view.mode === "replay") selectRound(Number(e.target.value)); else { view.round = e.target.value; draw(); } } },
+    view.mode === "replay" ? null : opt("all", "All rounds", view.round === "all"),
+    S.rounds.map((r) => opt(r.number, `Round ${r.number}`, view.mode === "replay" ? r.number === selectedRound : String(r.number) === String(view.round))));
+  const playerSel = h("select", { "aria-label": "Player", onchange: (e) => { view.player = e.target.value; renderSide(); draw(); } },
+    opt("", "All players", !view.player), [TA, TB].map((t) => h("optgroup", { label: t.name }, playersOf(t).map((p) => opt(p.steam_id, p.name, view.player === p.steam_id)))));
+  const sideSel = h("select", { "aria-label": "Side", onchange: (e) => { view.side = e.target.value; renderSide(); draw(); } },
+    opt("", "Both sides", !view.side), opt("t", "T side", view.side === "t"), opt("ct", "CT side", view.side === "ct"));
+  const kindSel = h("select", { "aria-label": "Grenade", onchange: (e) => { view.kind = e.target.value; renderSide(); draw(); } },
+    opt("", "All grenades", !view.kind), ["Smoke", "Flashbang", "HeGrenade", "Fire", "Decoy"].map((k) => opt(k, k === "Fire" ? "Molotov / incendiary" : GKIND[k][0], view.kind === k)));
+  const levelSeg = hasLower ? h("div", { class: "seg" }, [["upper", "Upper"], ["lower", "Lower"]].map(([k, l]) => h("button", { class: level === k ? "on" : null, onclick: () => { level = k; renderTools(); draw(); } }, l))) : null;
+  const parts = [modeSeg, roundSel, view.mode === "replay" ? null : playerSel, view.mode === "replay" ? null : sideSel,
+    view.mode === "grenades" || view.mode === "lineups" ? kindSel : null, levelSeg];
+  tools.replaceChildren(...parts.filter(Boolean));
+  $("#mapnote").textContent = OV ? (M.radar ? "" : "map sketched from player positions; drop the map's radar image on the page to draw it") : "no radar calibration for this map: positions are fitted to the view";
+}
+function renderSide() {
+  const side = $("#mapside");
+  const tl = $("#timeline");
+  tl.replaceChildren();
+  if (view.mode === "replay") {
+    side.replaceChildren(h("div", { class: "card" }, h("div", { id: "hud" })), h("div", { class: "legend", id: "legend" }));
+    hudKey = "";
+    const r = replayRound();
+    if (!r) return;
+    const [t0, t1] = replayBounds(r);
+    if (replay.tick < t0 || replay.tick > t1) replay.tick = r.freeze_end_tick ?? t0;
+    const range = h("input", { type: "range", min: t0, max: t1, step: 1, value: replay.tick, "aria-label": "Time in round",
+      oninput: (e) => { replay.tick = Number(e.target.value); draw(); } });
+    const clock = h("span", { class: "clock" });
+    const play = h("button", { class: "btn", onclick: () => { replay.playing = !replay.playing; if (replay.playing && replay.tick >= t1) replay.tick = t0; play.textContent = replay.playing ? "⏸ Pause" : "▶ Play"; replay.last = performance.now(); if (replay.playing) requestAnimationFrame(loop); } }, replay.playing ? "⏸ Pause" : "▶ Play");
+    const idx = S.rounds.indexOf(r);
+    const prev = h("button", { class: "btn", disabled: idx <= 0 ? true : null, onclick: () => selectRound(S.rounds[idx - 1].number) }, "⏮");
+    const next = h("button", { class: "btn", disabled: idx >= S.rounds.length - 1 ? true : null, onclick: () => selectRound(S.rounds[idx + 1].number) }, "⏭");
+    const speed = h("select", { "aria-label": "Speed", onchange: (e) => { replay.speed = Number(e.target.value); } },
+      [0.5, 1, 2, 4, 8].map((s) => h("option", { value: s, selected: s === replay.speed ? true : null }, s + "×")));
+    tl.append(prev, play, next, range, clock, speed);
+    replay.range = range;
+    replay.clock = clock;
+    replay.bounds = [t0, t1];
+    replay.playBtn = play;
+    legend([["T", "dot", css("--t")], ["CT", "dot", css("--ct")], ["Bomb", "dot", "#ff3c3c"], ["Smoke", "dot", GKIND.Smoke[1]], ["Fire", "dot", GKIND.Molotov[1]], ["Death", "x"]]);
+  } else if (view.mode === "lineups") {
+    const rows = lineupRows();
+    side.replaceChildren(h("div", { class: "card" }, h("div", { class: "muted", style: "font-size:12px;margin-bottom:6px" }, `${rows.length} lineups thrown more than once`),
+      h("div", { class: "list" }, rows.length ? rows.map(({ l, i }) => h("div", { class: "item" + (view.lineup === i ? " on" : ""), onclick: () => { view.lineup = view.lineup === i ? -1 : i; renderSide(); draw(); } },
+        h("div", null, h("i", { class: "dot", style: `background:${GKIND[l.kind][1]};margin-right:6px` }), h("b", null, `${GKIND[l.kind][0]} ×${l.grenades.length}`), " ", h("span", { class: sideOf(l.side) }, SIDE_LABEL[sideOf(l.side)])),
+        h("div", { class: "muted", style: "font-size:12px" }, `${l.throw_place ? "from " + l.throw_place + " · " : ""}${l.throwers.map(nameOf).join(", ")}${l.jump_throw ? " · jump throw" : ""}`))) : h("div", { class: "empty" }, "None with these filters"))),
+      h("div", { class: "legend", id: "legend" }));
+  } else {
+    side.replaceChildren(h("div", { class: "card" }, summaryFor(view.mode)), h("div", { class: "legend", id: "legend" }));
+  }
+}
+function summaryFor(mode) {
+  if (mode === "kills") {
+    const ks = S.kills.filter((k) => inFilter(k.round, k.attacker_side || k.victim_side, [k.attacker, k.victim]));
+    const places = {};
+    for (const k of ks) if (k.attacker_place && (!view.player || k.attacker === view.player)) places[k.attacker_place] = (places[k.attacker_place] || 0) + 1;
+    const top = Object.entries(places).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    return h("div", null, h("div", { class: "muted", style: "font-size:12px" }, `${ks.length} kills shown`),
+      h("div", { style: "margin-top:8px;font-weight:600" }, view.player ? `Where ${nameOf(view.player)} got kills` : "Kills by callout"),
+      top.length ? h("table", null, h("tbody", null, top.map(([p, n]) => h("tr", null, h("td", null, p), h("td", null, n))))) : h("div", { class: "empty" }, "—"));
+  }
+  if (mode === "grenades") {
+    const gs = S.grenades.filter((gr) => (!view.kind || (view.kind === "Fire" ? isFire(gr.kind) : gr.kind === view.kind)) && inFilter(gr.round, gr.side, [gr.thrower]));
+    const by = {};
+    for (const gr of gs) by[gr.kind] = (by[gr.kind] || 0) + 1;
+    return h("div", null, h("div", { class: "muted", style: "font-size:12px" }, `${gs.length} grenades shown · hover a landing spot for details`),
+      h("table", null, h("tbody", null, Object.entries(by).map(([k, n]) => h("tr", null, h("td", null, h("i", { class: "dot", style: `background:${GKIND[k][1]};margin-right:6px` }), GKIND[k][0]), h("td", null, n))))));
+  }
+  return h("div", { class: "muted" }, "Positions of living players over the selected rounds. Filter by player and side.");
+}
+function loop(now) {
+  if (signal.aborted || !replay.playing || view.mode !== "replay") return;
+  const dt = Math.min(0.1, (now - replay.last) / 1000);
+  replay.last = now;
+  replay.tick += dt * TR * replay.speed;
+  const [, t1] = replay.bounds || [0, 0];
+  if (replay.tick >= t1) { replay.tick = t1; replay.playing = false; if (replay.playBtn) replay.playBtn.textContent = "▶ Play"; }
+  draw();
+  if (replay.playing) requestAnimationFrame(loop);
+}
+function draw() {
+  begin();
+  if (view.mode === "replay") drawReplay();
+  else if (view.mode === "kills") drawKills();
+  else if (view.mode === "grenades") drawGrenades();
+  else if (view.mode === "lineups") drawLineups();
+  else drawHeatmap();
+  if (view.mode === "replay" && replay.range) {
+    replay.range.value = Math.round(replay.tick);
+    const r = replayRound();
+    const bomb = r && r.bomb_plant_tick != null && replay.tick >= r.bomb_plant_tick ? ` · bomb ${mmss(40 - (replay.tick - r.bomb_plant_tick) / TR)}` : "";
+    replay.clock.textContent = r ? (replay.tick < (r.freeze_end_tick ?? -Infinity) ? "freeze time" : mmss(roundTime(r, replay.tick))) + bomb : "";
+  }
+}
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
+function hover(ev) {
+  const [lx, ly] = screenToLogical(ev);
+  let best = null, bd = (12 / zoom) ** 2;
+  for (const it of hoverItems) { const d = (it.x - lx) ** 2 + (it.y - ly) ** 2; if (d < bd) { bd = d; best = it; } }
+  if (!best) { tip.style.display = "none"; canvas.onclick = null; return; }
+  tip.innerHTML = best.html();
+  const r = canvas.parentElement.getBoundingClientRect();
+  tip.style.display = "block";
+  tip.style.left = Math.min(ev.clientX - r.left + 14, r.width - 290) + "px";
+  tip.style.top = ev.clientY - r.top + 14 + "px";
+  canvas.onclick = best.click || null;
+}
+roundListeners.push((n) => {
+  if (view.mode !== "replay") { view.round = String(n); }
+  replay.tick = (roundByNumber.get(n) || {}).freeze_end_tick ?? (roundByNumber.get(n) || {}).start_tick ?? 0;
+  replay.playing = false;
+  renderTools();
+  renderSide();
+  draw();
+});
+
+/* ---------- utility ---------- */
+(function utility() {
+  const rows = S.players.filter((p) => p.rounds_played > 0).map((p) => {
+    const mine = S.grenades.filter((gr) => gr.thrower === p.steam_id);
+    const dmg = (f) => mine.filter((gr) => f(gr.kind)).reduce((a, gr) => a + gr.enemy_damage, 0);
+    return { p, he: dmg((k) => k === "HeGrenade"), fire: dmg(isFire) };
+  });
+  $("#utiltable").append(table([
+    { key: "name", label: "Player", value: (x) => x.p.name, show: (x) => nameCell(x.p) },
+    { key: "fl", label: "Flashes", value: (x) => x.p.flashbangs_thrown },
+    { key: "ef", label: "Enemies blinded", value: (x) => x.p.enemies_flashed },
+    { key: "bt", label: "Blind s / flash", title: "Enemy blind time per flashbang thrown", value: (x) => ratio(x.p.enemy_flash_duration, x.p.flashbangs_thrown), show: (x) => ratio(x.p.enemy_flash_duration, x.p.flashbangs_thrown).toFixed(2) },
+    { key: "fa", label: "Flash assists", value: (x) => x.p.flash_assists },
+    { key: "fk", label: "Flash → kill", title: "Flashes that blinded an enemy killed by the team while blind", value: (x) => x.p.flashes_leading_to_kill },
+    { key: "tf", label: "Team flashed", value: (x) => x.p.teammates_flashed, cls: (x) => (x.p.teammates_flashed > x.p.enemies_flashed ? "bad" : null) },
+    { key: "sm", label: "Smokes", value: (x) => x.p.smokes_thrown },
+    { key: "he", label: "HE (dmg)", value: (x) => x.he, show: (x) => `${x.p.he_thrown} (${x.he})` },
+    { key: "mo", label: "Molotovs (dmg)", value: (x) => x.fire, show: (x) => `${x.p.molotovs_thrown} (${x.fire})` },
+    { key: "ud", label: "Utility dmg", value: (x) => x.p.utility_damage },
+    { key: "uu", label: "Unused $", title: "Value of grenades still carried at death", value: (x) => x.p.utility_unused_value, show: (x) => "$" + x.p.utility_unused_value.toLocaleString() },
+  ], rows, "ud"));
+})();
+
+/* ---------- aim ---------- */
+(function aim() {
+  const rows = S.players.filter((p) => p.aim && p.aim.shots > 0).map((p) => ({ p, a: p.aim }));
+  if (!rows.length) { $("#aimtable").append(h("div", { class: "empty" }, "No shots recorded")); return; }
+  $("#aimtable").append(table([
+    { key: "name", label: "Player", value: (x) => x.p.name, show: (x) => nameCell(x.p) },
+    { key: "sh", label: "Shots", value: (x) => x.a.shots },
+    { key: "acc", label: "Accuracy", title: "Shots that hit an enemy", value: (x) => ratio(x.a.hits, x.a.shots), show: (x) => pct(x.a.hits, x.a.shots) },
+    { key: "hh", label: "Head hits", title: "Share of hits on the head", value: (x) => ratio(x.a.head_hits, x.a.hits), show: (x) => pct(x.a.head_hits, x.a.hits) },
+    { key: "fs", label: "First shot", title: "Engagements whose first shot hit", value: (x) => ratio(x.a.first_shot_hits, x.a.engagements), show: (x) => pct(x.a.first_shot_hits, x.a.engagements) },
+    { key: "st", label: "Stopped", title: "Rifle, sniper and pistol shots fired slow enough to be accurate (counter-strafing)", value: (x) => ratio(x.a.accurate_speed_shots, x.a.speed_checked_shots), show: (x) => pct(x.a.accurate_speed_shots, x.a.speed_checked_shots) },
+    { key: "cp", label: "Crosshair", title: "Median angle between crosshair and enemy head 0.2 s before an engagement's first shot (lower is better)", value: (x) => -(median(x.a.crosshair_offsets) ?? 99), show: (x) => { const m = median(x.a.crosshair_offsets); return m == null ? "–" : m.toFixed(1) + "°"; } },
+    { key: "ttk", label: "Time to kill", title: "Median seconds from first shot to kill", value: (x) => -(median(x.a.kill_times) ?? 99), show: (x) => { const m = median(x.a.kill_times); return m == null ? "–" : m.toFixed(2) + " s"; } },
+    { key: "en", label: "Engagements", title: "Engagements won (killed the enemy) / opened", value: (x) => ratio(x.a.engagement_kills, x.a.engagements), show: (x) => `${x.a.engagement_kills}/${x.a.engagements}` },
+    { key: "wp", label: "Main weapons", sort: false, align: "left", value: () => 0, show: (x) => x.a.weapons.filter((w) => w.kills > 0 || w.shots >= 20).slice(0, 3).map((w) => `${wname(w.weapon)} ${w.kills}K ${pct(w.hits, w.shots)}`).join(" · ") },
+  ], rows, "acc"));
+})();
+
+/* ---------- clutches ---------- */
+(function clutches() {
+  const cs = S.clutches;
+  if (!cs.length) { $("#clutchtable").append(h("div", { class: "empty" }, "No clutches")); return; }
+  $("#clutchtable").append(table([
+    { key: "r", label: "Round", value: (c) => c.round, show: (c) => h("a", { href: "#rounds", onclick: () => selectRound(c.round) }, c.round) },
+    { key: "name", label: "Player", align: "left", value: (c) => c.name, show: (c) => h("span", { class: sideOf(c.side) }, c.name) },
+    { key: "o", label: "Situation", value: (c) => c.opponents, show: (c) => `1v${c.opponents}` },
+    { key: "k", label: "Kills", value: (c) => c.kills },
+    { key: "w", label: "Result", value: (c) => (c.won ? 1 : 0), show: (c) => h("span", { class: c.won ? "good" : "bad" }, c.won ? "won" : "lost"), },
+    { key: "s", label: "Survived", value: (c) => (c.survived ? 1 : 0), show: (c) => (c.survived ? "yes" : "no") },
+  ], cs, "r", false));
+})();
+
+/* ---------- footer ---------- */
+$("#foot").append(
+  h("p", null, `Generated by ${M.generator} from ${M.file || "a demo"} in ${(M.parse_seconds || 0).toFixed(1)} s.`),
+  h("p", null, "Economy is read when freeze time ends: buy types use the team's average equipment value per player (eco under $1,000, semi-eco under $2,000, force under $4,000, else full buy); pistol rounds are rounds where every player started with $1,000 or less."),
+  h("p", null, "A clutch starts when a player is the last alive on their side with at least one enemy alive. Aim numbers come from every shot: a hit is damage dealt in the tick of the shot; an engagement opens with the first shot at an enemy after 2 s without shooting at them."),
+  h("p", null, "Rating 1.0 is HLTV's published formula; Impact and Rating 2.0 are community approximations."));
+
+/* ---------- start ---------- */
+renderTools();
+renderSide();
+window.addEventListener("resize", resizeCanvas, { signal });
+resizeCanvas();
+// Links like #map-kills open a view of the map.
+const linked = MODES.find(([k]) => location.hash === "#map-" + k);
+if (linked) { view.mode = linked[0]; renderTools(); renderSide(); draw(); document.getElementById("map").scrollIntoView(); }
+// #round-5 opens round 5 in the replay; #round-5-40 starts 40 s after freeze time.
+const moment = location.hash.match(/^#round-(\d+)(?:-(\d+(?:\.\d+)?))?$/);
+if (moment && roundByNumber.has(Number(moment[1]))) {
+  const r = roundByNumber.get(Number(moment[1]));
+  selectRound(r.number, true);
+  if (moment[2] != null) { replay.tick = (r.freeze_end_tick ?? r.start_tick) + Number(moment[2]) * TR; draw(); }
+}
+}
+</script>
+</body>
+</html>
