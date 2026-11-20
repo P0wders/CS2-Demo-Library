@@ -87,6 +87,25 @@ impl Serializer {
         self.by_name.get(name).copied()
     }
 
+    /// Whether a polymorphic pointer is reachable from this serializer: then
+    /// decoding a field may depend on a subtype set by an earlier update.
+    pub fn has_polymorphic_fields(&self) -> bool {
+        fn rec(ser: &Serializer, depth: usize) -> bool {
+            depth <= 16
+                && ser.fields.iter().any(|f| match &f.kind {
+                    FieldKind::Pointer {
+                        serializer,
+                        polymorphic,
+                    } => !polymorphic.is_empty() || rec(serializer, depth + 1),
+                    FieldKind::Vector {
+                        element: VectorElement::Serializer(s),
+                    } => rec(s, depth + 1),
+                    _ => false,
+                })
+        }
+        rec(self, 0)
+    }
+
     /// Returns the decoder used for the value at `path`. Paths below a
     /// polymorphic pointer resolve against its base type; use
     /// [`Serializer::decoder_for_with`] to supply the concrete subtype.
@@ -97,6 +116,19 @@ impl Serializer {
     /// Like [`Serializer::decoder_for`], with `subtype(pointer_path)` returning
     /// the current subtype index of a polymorphic pointer (its decoded value).
     pub fn decoder_for_with(&self, path: &[i32], subtype: &dyn Fn(&[i32]) -> Option<i32>) -> Option<Decoder> {
+        self.decoder_ref(path, subtype).copied()
+    }
+
+    /// [`Serializer::decoder_for_with`] without copying the decoder.
+    #[inline]
+    pub(crate) fn decoder_ref(
+        &self,
+        path: &[i32],
+        subtype: &dyn Fn(&[i32]) -> Option<i32>,
+    ) -> Option<&Decoder> {
+        static LENGTH: Decoder = Decoder::VarU32;
+        static PRESENCE: Decoder = Decoder::Bool;
+        static SUBTYPE: Decoder = Decoder::PolymorphicPointer;
         let mut ser = self;
         let mut i = 0;
         loop {
@@ -104,11 +136,11 @@ impl Serializer {
             i += 1;
             let remaining = path.len() - i;
             match &field.kind {
-                FieldKind::Value(d) => return Some(*d),
-                FieldKind::FixedArray { decoder, .. } => return Some(*decoder),
+                FieldKind::Value(d) => return Some(d),
+                FieldKind::FixedArray { decoder, .. } => return Some(decoder),
                 FieldKind::Vector {
                     element: VectorElement::Value(d),
-                } => return Some(if remaining == 0 { Decoder::VarU32 } else { *d }),
+                } => return Some(if remaining == 0 { &LENGTH } else { d }),
                 FieldKind::Vector {
                     element: VectorElement::Serializer(s),
                 } => {
@@ -116,7 +148,7 @@ impl Serializer {
                         ser = s;
                         i += 1; // skip the element index
                     } else {
-                        return Some(Decoder::VarU32);
+                        return Some(&LENGTH);
                     }
                 }
                 FieldKind::Pointer {
@@ -125,12 +157,12 @@ impl Serializer {
                 } => {
                     if polymorphic.is_empty() {
                         if remaining == 0 {
-                            return Some(Decoder::Bool);
+                            return Some(&PRESENCE);
                         }
                         ser = serializer;
                     } else {
                         if remaining == 0 {
-                            return Some(Decoder::PolymorphicPointer);
+                            return Some(&SUBTYPE);
                         }
                         ser = subtype(&path[..i])
                             .and_then(|t| polymorphic.get(usize::try_from(t).ok()?))

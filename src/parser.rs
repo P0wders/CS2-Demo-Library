@@ -4,8 +4,8 @@
 use crate::bitreader::BitReader;
 use crate::container::{DemoHeader, Frame, FrameIter, read_header};
 use crate::entities::{
-    Class, DecodeEnv, Entity, EntityDecoder, EntityDiagnostics, EntityOp, EntityStore, FieldPath,
-    PacketEntitiesCursor,
+    Class, DecodeEnv, Entity, EntityDecoder, EntityDiagnostics, EntityJob, EntityOp, EntityStore, FieldPath,
+    NO_CLASS, PacketEntitiesCursor,
 };
 use crate::error::{Error, Result, decode_proto};
 use crate::events::{EventDescriptors, EventValue, GameEvent};
@@ -20,11 +20,11 @@ use std::sync::Arc;
 
 // Net message ids (NET_Messages / SVC_Messages / EBaseGameEvents).
 const NET_TICK: u32 = 4;
-const SVC_SERVER_INFO: u32 = 40;
+pub(crate) const SVC_SERVER_INFO: u32 = 40;
 const SVC_CREATE_STRING_TABLE: u32 = 44;
 const SVC_UPDATE_STRING_TABLE: u32 = 45;
 const SVC_CLEAR_ALL_STRING_TABLES: u32 = 51;
-const SVC_PACKET_ENTITIES: u32 = 55;
+pub(crate) const SVC_PACKET_ENTITIES: u32 = 55;
 const GE_SOURCE1_LEGACY_GAME_EVENT_LIST: u32 = 205;
 const GE_SOURCE1_LEGACY_GAME_EVENT: u32 = 207;
 
@@ -41,6 +41,43 @@ pub struct ParseOptions {
     pub raw_net_messages: bool,
     /// Stop after this tick (inclusive).
     pub end_tick: Option<i32>,
+    /// Threads a parse with entities may use, the calling thread included.
+    /// With more than one, a reader thread walks the frames and other threads
+    /// decode entity data ahead, while the calling thread applies it and runs
+    /// the visitor, in demo order: the callbacks are the same as with one
+    /// thread. `0` (the default) uses up to [`ParseOptions::AUTO_THREADS`],
+    /// fewer on smaller machines; `1` parses everything on the calling thread.
+    pub threads: usize,
+    /// Entity data the parse may leave out because the visitor doesn't use
+    /// it, to go faster. Default: nothing.
+    pub skip: EntitySkip,
+}
+
+/// Entity data a parse may leave out (see [`ParseOptions::skip`]).
+///
+/// * Entities of a skipped class are still created, leave and are deleted
+///   (with their baseline properties), but their updates aren't decoded or
+///   reported to [`Visitor::on_entity`].
+/// * Skipped properties aren't stored, and aren't listed in the changed paths
+///   given to [`Visitor::on_entity`]. An update that changes nothing else
+///   isn't reported.
+///
+/// Skipping is a hint: demos from builds that don't give each entity's data
+/// length (older than those tested) are decoded in full.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EntitySkip {
+    /// Class names, e.g. `CChicken`.
+    pub classes: Vec<String>,
+    /// Dotted property names, e.g. `m_nTickBase` or
+    /// `CBodyComponent.m_SerializePoseRecipeAG2Dynamic`, skipped in every
+    /// class that has them. Skipping an array, vector or object skips all of it.
+    pub props: Vec<String>,
+}
+
+impl EntitySkip {
+    pub fn is_empty(&self) -> bool {
+        self.classes.is_empty() && self.props.is_empty()
+    }
 }
 
 impl Default for ParseOptions {
@@ -50,15 +87,35 @@ impl Default for ParseOptions {
             game_events: true,
             raw_net_messages: false,
             end_tick: None,
+            threads: 0,
+            skip: EntitySkip::default(),
         }
     }
 }
 
 impl ParseOptions {
+    /// Most threads used when [`ParseOptions::threads`] is `0`. Past this,
+    /// the calling thread (applying entities and running the visitor) is the
+    /// bottleneck, and more decoding threads don't help.
+    pub const AUTO_THREADS: usize = 8;
+
     pub fn events_only() -> Self {
         ParseOptions {
             entities: false,
             ..Default::default()
+        }
+    }
+
+    /// Threads this parse will use, the calling thread included.
+    pub(crate) fn thread_count(&self) -> usize {
+        if !self.entities {
+            return 1;
+        }
+        match self.threads {
+            0 => std::thread::available_parallelism()
+                .map_or(1, |n| n.get())
+                .min(Self::AUTO_THREADS),
+            n => n,
         }
     }
 }
@@ -264,36 +321,72 @@ impl Context {
         &self.team_idx
     }
 
-    fn build_classes(&mut self) -> Result<()> {
+    fn build_classes(&mut self, skip: &EntitySkip) -> Result<()> {
         let (Some(info), Some(st)) = (&self.pending_class_info, &self.send_tables) else {
             return Ok(());
         };
-        let mut classes = Vec::new();
-        for c in &info.classes {
-            let id = c.class_id.unwrap_or(-1);
-            let name = c.network_name.as_deref().unwrap_or("");
-            let Some(ser) = st.get(name) else {
-                return Err(Error::malformed(format!("class {name} ({id}) has no serializer")));
-            };
-            let id = usize::try_from(id).map_err(|_| Error::malformed("negative class id"))?;
-            if classes.len() <= id {
-                classes.resize(id + 1, None);
-            }
-            classes[id] = Some(Arc::new(Class::new(id as u32, ser.name.clone(), ser.clone())));
-        }
-        self.classes = classes;
+        self.classes = build_classes(info, st, skip)?;
         self.pending_class_info = None;
         Ok(())
     }
+
+    pub(crate) fn set_send_tables(&mut self, st: SendTables) {
+        self.send_tables = Some(st);
+    }
+
+    pub(crate) fn set_classes(&mut self, classes: Vec<Option<Arc<Class>>>) {
+        self.classes = classes;
+        self.pending_class_info = None;
+    }
+
+    pub(crate) fn coord_params(&self) -> crate::bitreader::CoordParams {
+        self.send_tables
+            .as_ref()
+            .map(|s| s.coord_params)
+            .unwrap_or_default()
+    }
+}
+
+/// The classes announced by `DEM_ClassInfo`, with their serializers.
+pub(crate) fn build_classes(
+    info: &CDemoClassInfo,
+    st: &SendTables,
+    skip: &EntitySkip,
+) -> Result<Vec<Option<Arc<Class>>>> {
+    let mut classes = Vec::new();
+    for c in &info.classes {
+        let id = c.class_id.unwrap_or(-1);
+        let name = c.network_name.as_deref().unwrap_or("");
+        let Some(ser) = st.get(name) else {
+            return Err(Error::malformed(format!("class {name} ({id}) has no serializer")));
+        };
+        let id = usize::try_from(id).map_err(|_| Error::malformed("negative class id"))?;
+        if classes.len() <= id {
+            classes.resize(id + 1, None);
+        }
+        let mut class = Class::new(id as u32, ser.name.clone(), ser.clone());
+        class.set_skip(skip);
+        classes[id] = Some(Arc::new(class));
+    }
+    Ok(classes)
 }
 
 /// Streaming demo parser over an in-memory (usually memory-mapped) demo.
 pub struct DemoParser<'a> {
-    data: &'a [u8],
-    opts: ParseOptions,
-    ctx: Context,
+    pub(crate) data: &'a [u8],
+    pub(crate) opts: ParseOptions,
+    pub(crate) ctx: Context,
     frame_buf: Vec<u8>,
     msg_buf: Vec<u8>,
+    job: EntityJob,
+}
+
+/// What the frame loop does after a frame's tick was handled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Flow {
+    Continue,
+    /// The visitor or `end_tick` stopped the parse before this frame.
+    Stopped,
 }
 
 impl<'a> DemoParser<'a> {
@@ -308,6 +401,7 @@ impl<'a> DemoParser<'a> {
             ctx: Context::new(header),
             frame_buf: Vec::new(),
             msg_buf: Vec::new(),
+            job: EntityJob::default(),
         }
     }
 
@@ -315,38 +409,59 @@ impl<'a> DemoParser<'a> {
         &self.ctx
     }
 
-    /// Parses the whole demo, returning the final game state.
+    /// Parses the whole demo, returning the final game state. Uses the
+    /// threads allowed by [`ParseOptions::threads`].
     pub fn run<V: Visitor + ?Sized>(mut self, visitor: &mut V) -> Result<Context> {
+        let threads = self.opts.thread_count();
+        if threads > 1 {
+            return self.run_parallel(visitor, threads);
+        }
         visitor.on_start(&self.ctx);
-        let data = self.data;
-        let mut stopped = false;
-        for frame in FrameIter::new(data) {
+        let stopped = self.run_frames(16, visitor)?;
+        Ok(self.finish(stopped, visitor))
+    }
+
+    /// Runs the frames from byte offset `pos` to the end on this thread.
+    /// Returns whether the parse was stopped early.
+    pub(crate) fn run_frames<V: Visitor + ?Sized>(&mut self, pos: usize, visitor: &mut V) -> Result<bool> {
+        for frame in FrameIter::at(self.data, pos) {
             let frame = frame?;
-            if frame.tick != self.ctx.tick && frame.tick >= 0 {
-                if self.ctx.tick >= 0 {
-                    self.emit_synthetic_round_events(visitor);
-                }
-                if self.ctx.tick >= 0 && visitor.on_tick_end(&self.ctx).is_break() {
-                    stopped = true;
-                    break;
-                }
-                if self.opts.end_tick.is_some_and(|end| frame.tick > end) {
-                    stopped = true;
-                    break;
-                }
-                self.ctx.tick = frame.tick;
+            if self.begin_frame(frame.tick, visitor) == Flow::Stopped {
+                return Ok(true);
             }
             if frame.cmd == EDemoCommands::DemStop as u32 {
                 break;
             }
             self.handle_frame(&frame, visitor)?;
         }
+        Ok(false)
+    }
+
+    /// Ends the previous tick when a frame starts a new one.
+    pub(crate) fn begin_frame<V: Visitor + ?Sized>(&mut self, tick: i32, visitor: &mut V) -> Flow {
+        if tick != self.ctx.tick && tick >= 0 {
+            if self.ctx.tick >= 0 {
+                self.emit_synthetic_round_events(visitor);
+            }
+            if self.ctx.tick >= 0 && visitor.on_tick_end(&self.ctx).is_break() {
+                return Flow::Stopped;
+            }
+            if self.opts.end_tick.is_some_and(|end| tick > end) {
+                return Flow::Stopped;
+            }
+            self.ctx.tick = tick;
+        }
+        Flow::Continue
+    }
+
+    /// Ends the last tick (unless stopped) and the parse.
+    pub(crate) fn finish<V: Visitor + ?Sized>(mut self, stopped: bool, visitor: &mut V) -> Context {
         if !stopped && self.ctx.tick >= 0 {
             self.emit_synthetic_round_events(visitor);
             let _ = visitor.on_tick_end(&self.ctx);
         }
         visitor.on_finish(&self.ctx);
-        Ok(self.ctx)
+        self.ctx
     }
 
     fn handle_frame<V: Visitor + ?Sized>(&mut self, frame: &Frame, visitor: &mut V) -> Result<()> {
@@ -364,13 +479,13 @@ impl<'a> DemoParser<'a> {
                 let mut buf = Vec::new();
                 let st = SendTables::from_demo_send_tables(frame.data(&mut buf)?)?;
                 self.ctx.send_tables = Some(st);
-                self.ctx.build_classes()
+                self.ctx.build_classes(&self.opts.skip)
             }
             EDemoCommands::DemClassInfo => {
                 let mut buf = Vec::new();
                 let info: CDemoClassInfo = decode_proto("CDemoClassInfo", frame.data(&mut buf)?)?;
                 self.ctx.pending_class_info = Some(info);
-                self.ctx.build_classes()
+                self.ctx.build_classes(&self.opts.skip)
             }
             // Full packets are keyframes (complete snapshots) used for seeking;
             // the sequential delta stream already contains the same state.
@@ -378,74 +493,18 @@ impl<'a> DemoParser<'a> {
         }
     }
 
-    /// `CDemoPacket { bytes data = 3; }` decoded by hand to avoid a copy.
     fn handle_demo_packet<V: Visitor + ?Sized>(&mut self, payload: &[u8], visitor: &mut V) -> Result<()> {
-        let mut pos = 0;
-        while pos < payload.len() {
-            let key = read_varint(payload, &mut pos)?;
-            match key & 7 {
-                0 => {
-                    read_varint(payload, &mut pos)?;
-                }
-                2 => {
-                    let len = read_varint(payload, &mut pos)? as usize;
-                    let body = payload
-                        .get(pos..pos + len)
-                        .ok_or(Error::UnexpectedEof("CDemoPacket"))?;
-                    pos += len;
-                    if key >> 3 == 3 {
-                        self.handle_messages(body, visitor)?;
-                    }
-                }
-                5 => pos += 4,
-                1 => pos += 8,
-                w => return Err(Error::malformed(format!("CDemoPacket: unexpected wire type {w}"))),
-            }
-        }
-        Ok(())
-    }
-
-    fn handle_messages<V: Visitor + ?Sized>(&mut self, data: &[u8], visitor: &mut V) -> Result<()> {
-        let mut r = BitReader::new(data);
         let mut msg = std::mem::take(&mut self.msg_buf);
-        let result = (|| {
-            while r.remaining_bits() >= 8 {
-                let msg_type = r.read_ubitvar();
-                let size = r.read_varu32() as usize;
-                if size * 8 > r.remaining_bits() {
-                    return Err(Error::UnexpectedEof("net message"));
-                }
-                if !self.wants_message(msg_type) {
-                    r.skip_bits(size * 8);
-                    continue;
-                }
-                msg.clear();
-                r.read_bytes_into(&mut msg, size);
-                r.check_overflow("net message")?;
-                self.handle_message(msg_type, &msg, visitor)?;
-            }
-            Ok(())
-        })();
+        let wants = Wants::new(&self.opts);
+        let result = for_each_message(payload, wants, &mut msg, |msg_type, data| {
+            self.handle_message(msg_type, data, visitor)?;
+            Ok(ControlFlow::Continue(()))
+        });
         self.msg_buf = msg;
-        result
+        result.map(|_| ())
     }
 
-    /// Whether a message's payload is needed at all (others are skipped uncopied).
-    fn wants_message(&self, msg_type: u32) -> bool {
-        match msg_type {
-            NET_TICK => false,
-            SVC_SERVER_INFO
-            | SVC_CREATE_STRING_TABLE
-            | SVC_UPDATE_STRING_TABLE
-            | SVC_CLEAR_ALL_STRING_TABLES
-            | GE_SOURCE1_LEGACY_GAME_EVENT_LIST => true,
-            SVC_PACKET_ENTITIES => self.opts.entities,
-            GE_SOURCE1_LEGACY_GAME_EVENT => self.opts.game_events,
-            _ => self.opts.raw_net_messages,
-        }
-    }
-
-    fn handle_message<V: Visitor + ?Sized>(
+    pub(crate) fn handle_message<V: Visitor + ?Sized>(
         &mut self,
         msg_type: u32,
         data: &[u8],
@@ -476,7 +535,7 @@ impl<'a> DemoParser<'a> {
             SVC_PACKET_ENTITIES => {
                 if self.opts.entities {
                     let m: CsvcMsgPacketEntities = decode_proto("CSVCMsg_PacketEntities", data)?;
-                    self.handle_packet_entities(&m, visitor)?;
+                    self.handle_packet_entities(m, visitor)?;
                 }
             }
             GE_SOURCE1_LEGACY_GAME_EVENT_LIST => {
@@ -569,7 +628,7 @@ impl<'a> DemoParser<'a> {
 
     fn handle_packet_entities<V: Visitor + ?Sized>(
         &mut self,
-        m: &CsvcMsgPacketEntities,
+        mut m: CsvcMsgPacketEntities,
         visitor: &mut V,
     ) -> Result<()> {
         if self.ctx.classes.is_empty() {
@@ -577,7 +636,68 @@ impl<'a> DemoParser<'a> {
                 "packet entities before class info / send tables",
             ));
         }
+        let mut job = std::mem::take(&mut self.job);
+        let entities = &self.ctx.entities;
+        let scanned = job.scan(
+            m.entity_data.as_deref().unwrap_or(&[]),
+            m.serialized_entities.as_deref(),
+            m.updated_entries.unwrap_or(0),
+            m.has_pvs_vis_bits_deprecated.unwrap_or(0) > 0,
+            self.ctx.class_id_bits,
+            &self.ctx.classes,
+            &|idx| entities.get(idx).map_or(NO_CLASS, |e| e.class().id),
+        );
+        let result = if scanned {
+            job.set_data(m.entity_data.take().unwrap_or_default());
+            let cp = self.ctx.coord_params();
+            job.decode(&self.ctx.classes, &cp);
+            self.apply_entities(&mut job, visitor)
+        } else {
+            self.handle_packet_entities_unsized(&m, visitor)
+        };
+        self.job = job;
+        result
+    }
 
+    /// Applies a scanned and decoded `svc_PacketEntities` message.
+    pub(crate) fn apply_entities<V: Visitor + ?Sized>(
+        &mut self,
+        job: &mut EntityJob,
+        visitor: &mut V,
+    ) -> Result<()> {
+        let mut cursor = job.cursor();
+        // String tables and classes don't change within a message.
+        let env = DecodeEnv {
+            class_id_bits: self.ctx.class_id_bits,
+            classes: &self.ctx.classes,
+            coord_params: self.ctx.coord_params(),
+            baselines: self.ctx.string_tables.get("instancebaseline"),
+        };
+        while let Some((idx, op, range)) =
+            cursor.next(&mut self.ctx.entities, &mut self.ctx.entity_dec, &env)?
+        {
+            track_entity(
+                &self.ctx.entities,
+                &mut self.ctx.game_rules_idx,
+                &mut self.ctx.team_idx,
+                idx,
+                op,
+            );
+            let ctx = &self.ctx;
+            if let Some(entity) = ctx.entities.get(idx) {
+                visitor.on_entity(ctx, entity, op, cursor.paths(range));
+            }
+        }
+        cursor.finish(&mut self.ctx.entities)
+    }
+
+    /// Decodes and applies a message that doesn't give the bit length of
+    /// each entity's fields (older builds), one entity at a time.
+    fn handle_packet_entities_unsized<V: Visitor + ?Sized>(
+        &mut self,
+        m: &CsvcMsgPacketEntities,
+        visitor: &mut V,
+    ) -> Result<()> {
         // Recent builds announce the bit length of every entity's field data.
         let sizes = match m.serialized_entities.as_deref() {
             Some(raw) if !raw.is_empty() => {
@@ -618,18 +738,13 @@ impl<'a> DemoParser<'a> {
                 cursor.next(entities, entity_dec, &env)?
             };
             let Some((idx, op)) = step else { break };
-            let Some(entity) = self.ctx.entities.get(idx) else {
-                continue;
-            };
-            match (entity.class_name(), op) {
-                ("CCSGameRulesProxy", EntityOp::Created) => self.ctx.game_rules_idx = Some(idx),
-                ("CCSGameRulesProxy", EntityOp::Deleted) => self.ctx.game_rules_idx = None,
-                ("CCSTeam", EntityOp::Created) if !self.ctx.team_idx.contains(&idx) => {
-                    self.ctx.team_idx.push(idx)
-                }
-                ("CCSTeam", EntityOp::Deleted) => self.ctx.team_idx.retain(|&i| i != idx),
-                _ => {}
-            }
+            track_entity(
+                &self.ctx.entities,
+                &mut self.ctx.game_rules_idx,
+                &mut self.ctx.team_idx,
+                idx,
+                op,
+            );
             let ctx = &self.ctx;
             if let Some(entity) = ctx.entities.get(idx) {
                 visitor.on_entity(ctx, entity, op, ctx.entity_dec.paths());
@@ -642,7 +757,114 @@ impl<'a> DemoParser<'a> {
     }
 }
 
-fn read_varint(data: &[u8], pos: &mut usize) -> Result<u64> {
+/// Follows the entities the context finds by index (game rules, teams).
+fn track_entity(
+    entities: &EntityStore,
+    game_rules_idx: &mut Option<usize>,
+    team_idx: &mut Vec<usize>,
+    idx: usize,
+    op: EntityOp,
+) {
+    if !matches!(op, EntityOp::Created | EntityOp::Deleted) {
+        return;
+    }
+    let Some(entity) = entities.get(idx) else {
+        return;
+    };
+    match (entity.class_name(), op) {
+        ("CCSGameRulesProxy", EntityOp::Created) => *game_rules_idx = Some(idx),
+        ("CCSGameRulesProxy", EntityOp::Deleted) => *game_rules_idx = None,
+        ("CCSTeam", EntityOp::Created) if !team_idx.contains(&idx) => team_idx.push(idx),
+        ("CCSTeam", EntityOp::Deleted) => team_idx.retain(|&i| i != idx),
+        _ => {}
+    }
+}
+
+/// The net messages a parse needs.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Wants {
+    entities: bool,
+    game_events: bool,
+    raw_net_messages: bool,
+}
+
+impl Wants {
+    pub fn new(opts: &ParseOptions) -> Self {
+        Wants {
+            entities: opts.entities,
+            game_events: opts.game_events,
+            raw_net_messages: opts.raw_net_messages,
+        }
+    }
+
+    /// Whether a message's payload is needed at all (others are skipped uncopied).
+    fn message(self, msg_type: u32) -> bool {
+        match msg_type {
+            NET_TICK => false,
+            SVC_SERVER_INFO
+            | SVC_CREATE_STRING_TABLE
+            | SVC_UPDATE_STRING_TABLE
+            | SVC_CLEAR_ALL_STRING_TABLES
+            | GE_SOURCE1_LEGACY_GAME_EVENT_LIST => true,
+            SVC_PACKET_ENTITIES => self.entities,
+            GE_SOURCE1_LEGACY_GAME_EVENT => self.game_events,
+            _ => self.raw_net_messages,
+        }
+    }
+}
+
+/// Calls `f` with every net message of a `CDemoPacket` payload that `wants`
+/// asks for (the others are skipped without being copied), until it breaks.
+/// `CDemoPacket { bytes data = 3; }` is decoded by hand to avoid a copy.
+pub(crate) fn for_each_message(
+    payload: &[u8],
+    wants: Wants,
+    msg: &mut Vec<u8>,
+    mut f: impl FnMut(u32, &[u8]) -> Result<ControlFlow<()>>,
+) -> Result<ControlFlow<()>> {
+    let mut pos = 0;
+    while pos < payload.len() {
+        let key = read_varint(payload, &mut pos)?;
+        match key & 7 {
+            0 => {
+                read_varint(payload, &mut pos)?;
+            }
+            2 => {
+                let len = read_varint(payload, &mut pos)? as usize;
+                let body = payload
+                    .get(pos..pos + len)
+                    .ok_or(Error::UnexpectedEof("CDemoPacket"))?;
+                pos += len;
+                if key >> 3 == 3 {
+                    let mut r = BitReader::new(body);
+                    while r.remaining_bits() >= 8 {
+                        let msg_type = r.read_ubitvar();
+                        let size = r.read_varu32() as usize;
+                        if size * 8 > r.remaining_bits() {
+                            return Err(Error::UnexpectedEof("net message"));
+                        }
+                        if !wants.message(msg_type) {
+                            r.skip_bits(size * 8);
+                            continue;
+                        }
+                        msg.clear();
+                        r.read_bytes_into(msg, size);
+                        r.check_overflow("net message")?;
+                        if f(msg_type, msg)?.is_break() {
+                            return Ok(ControlFlow::Break(()));
+                        }
+                    }
+                }
+            }
+            5 => pos += 4,
+            1 => pos += 8,
+            w => return Err(Error::malformed(format!("CDemoPacket: unexpected wire type {w}"))),
+        }
+    }
+    Ok(ControlFlow::Continue(()))
+}
+
+pub(crate) fn read_varint(data: &[u8], pos: &mut usize) -> Result<u64> {
     let mut result = 0u64;
     let mut shift = 0;
     loop {

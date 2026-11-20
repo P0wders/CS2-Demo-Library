@@ -13,7 +13,8 @@ pub const MAX_DEPTH: usize = 7;
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FieldPath {
     path: [i32; MAX_DEPTH],
-    last: usize,
+    /// Index of the last component (a `u8` keeps the path at 32 bytes).
+    last: u8,
 }
 
 impl std::fmt::Debug for FieldPath {
@@ -35,7 +36,7 @@ impl FieldPath {
         }
         let mut fp = FieldPath {
             path: [0; MAX_DEPTH],
-            last: s.len() - 1,
+            last: (s.len() - 1) as u8,
         };
         fp.path[..s.len()].copy_from_slice(s);
         Some(fp)
@@ -43,7 +44,7 @@ impl FieldPath {
 
     #[inline]
     pub fn as_slice(&self) -> &[i32] {
-        &self.path[..=self.last]
+        &self.path[..=self.last as usize]
     }
 
     #[inline]
@@ -52,7 +53,7 @@ impl FieldPath {
             if self.last == 0 {
                 return false;
             }
-            self.path[self.last] = 0;
+            self.path[self.last as usize] = 0;
             self.last -= 1;
         }
         true
@@ -60,11 +61,11 @@ impl FieldPath {
 
     #[inline]
     fn push(&mut self, v: i32) -> bool {
-        if self.last + 1 >= MAX_DEPTH {
+        if self.last as usize + 1 >= MAX_DEPTH {
             return false;
         }
         self.last += 1;
-        self.path[self.last] = v;
+        self.path[self.last as usize] = v;
         true
     }
 }
@@ -271,6 +272,11 @@ fn read_op(r: &mut BitReader, h: &Huffman) -> Op {
 /// Reads the list of changed field paths for one entity update into `out`.
 pub fn read_field_paths(r: &mut BitReader, out: &mut Vec<FieldPath>) -> Result<()> {
     out.clear();
+    read_field_paths_append(r, out)
+}
+
+/// Like [`read_field_paths`], appending to `out`.
+pub(crate) fn read_field_paths_append(r: &mut BitReader, out: &mut Vec<FieldPath>) -> Result<()> {
     let h = huffman();
     let mut fp = FieldPath::new();
     loop {
@@ -281,49 +287,49 @@ pub fn read_field_paths(r: &mut BitReader, out: &mut Vec<FieldPath>) -> Result<(
         let ok = match op {
             Op::FieldPathEncodeFinish => return Ok(()),
             Op::PlusOne => {
-                fp.path[fp.last] += 1;
+                fp.path[fp.last as usize] += 1;
                 true
             }
             Op::PlusTwo => {
-                fp.path[fp.last] += 2;
+                fp.path[fp.last as usize] += 2;
                 true
             }
             Op::PlusThree => {
-                fp.path[fp.last] += 3;
+                fp.path[fp.last as usize] += 3;
                 true
             }
             Op::PlusFour => {
-                fp.path[fp.last] += 4;
+                fp.path[fp.last as usize] += 4;
                 true
             }
             Op::PlusN => {
-                fp.path[fp.last] += r.read_ubitvar_fp() as i32 + 5;
+                fp.path[fp.last as usize] += r.read_ubitvar_fp() as i32 + 5;
                 true
             }
             Op::PushOneLeftDeltaZeroRightZero => fp.push(0),
             Op::PushOneLeftDeltaZeroRightNonZero => fp.push(r.read_ubitvar_fp() as i32),
             Op::PushOneLeftDeltaOneRightZero => {
-                fp.path[fp.last] += 1;
+                fp.path[fp.last as usize] += 1;
                 fp.push(0)
             }
             Op::PushOneLeftDeltaOneRightNonZero => {
-                fp.path[fp.last] += 1;
+                fp.path[fp.last as usize] += 1;
                 fp.push(r.read_ubitvar_fp() as i32)
             }
             Op::PushOneLeftDeltaNRightZero => {
-                fp.path[fp.last] += r.read_ubitvar_fp() as i32;
+                fp.path[fp.last as usize] += r.read_ubitvar_fp() as i32;
                 fp.push(0)
             }
             Op::PushOneLeftDeltaNRightNonZero => {
-                fp.path[fp.last] += r.read_ubitvar_fp() as i32 + 2;
+                fp.path[fp.last as usize] += r.read_ubitvar_fp() as i32 + 2;
                 fp.push(r.read_ubitvar_fp() as i32 + 1)
             }
             Op::PushOneLeftDeltaNRightNonZeroPack6Bits => {
-                fp.path[fp.last] += r.read_bits(3) as i32 + 2;
+                fp.path[fp.last as usize] += r.read_bits(3) as i32 + 2;
                 fp.push(r.read_bits(3) as i32 + 1)
             }
             Op::PushOneLeftDeltaNRightNonZeroPack8Bits => {
-                fp.path[fp.last] += r.read_bits(4) as i32 + 2;
+                fp.path[fp.last as usize] += r.read_bits(4) as i32 + 2;
                 fp.push(r.read_bits(4) as i32 + 1)
             }
             Op::PushTwoLeftDeltaZero => push_n_fp(r, &mut fp, 2),
@@ -331,44 +337,44 @@ pub fn read_field_paths(r: &mut BitReader, out: &mut Vec<FieldPath>) -> Result<(
             Op::PushThreeLeftDeltaZero => push_n_fp(r, &mut fp, 3),
             Op::PushThreePack5LeftDeltaZero => push_n_bits5(r, &mut fp, 3),
             Op::PushTwoLeftDeltaOne => {
-                fp.path[fp.last] += 1;
+                fp.path[fp.last as usize] += 1;
                 push_n_fp(r, &mut fp, 2)
             }
             Op::PushTwoPack5LeftDeltaOne => {
-                fp.path[fp.last] += 1;
+                fp.path[fp.last as usize] += 1;
                 push_n_bits5(r, &mut fp, 2)
             }
             Op::PushThreeLeftDeltaOne => {
-                fp.path[fp.last] += 1;
+                fp.path[fp.last as usize] += 1;
                 push_n_fp(r, &mut fp, 3)
             }
             Op::PushThreePack5LeftDeltaOne => {
-                fp.path[fp.last] += 1;
+                fp.path[fp.last as usize] += 1;
                 push_n_bits5(r, &mut fp, 3)
             }
             Op::PushTwoLeftDeltaN => {
-                fp.path[fp.last] += r.read_ubitvar() as i32 + 2;
+                fp.path[fp.last as usize] += r.read_ubitvar() as i32 + 2;
                 push_n_fp(r, &mut fp, 2)
             }
             Op::PushTwoPack5LeftDeltaN => {
-                fp.path[fp.last] += r.read_ubitvar() as i32 + 2;
+                fp.path[fp.last as usize] += r.read_ubitvar() as i32 + 2;
                 push_n_bits5(r, &mut fp, 2)
             }
             Op::PushThreeLeftDeltaN => {
-                fp.path[fp.last] += r.read_ubitvar() as i32 + 2;
+                fp.path[fp.last as usize] += r.read_ubitvar() as i32 + 2;
                 push_n_fp(r, &mut fp, 3)
             }
             Op::PushThreePack5LeftDeltaN => {
-                fp.path[fp.last] += r.read_ubitvar() as i32 + 2;
+                fp.path[fp.last as usize] += r.read_ubitvar() as i32 + 2;
                 push_n_bits5(r, &mut fp, 3)
             }
             Op::PushN => {
                 let n = r.read_ubitvar() as usize;
-                fp.path[fp.last] += r.read_ubitvar() as i32;
+                fp.path[fp.last as usize] += r.read_ubitvar() as i32;
                 push_n_fp(r, &mut fp, n)
             }
             Op::PushNAndNonTopological => {
-                for i in 0..=fp.last {
+                for i in 0..=fp.last as usize {
                     if r.read_bool() {
                         fp.path[i] += r.read_vari32() + 1;
                     }
@@ -382,47 +388,47 @@ pub fn read_field_paths(r: &mut BitReader, out: &mut Vec<FieldPath>) -> Result<(
             }
             Op::PopOnePlusOne => {
                 let ok = fp.pop(1);
-                fp.path[fp.last] += 1;
+                fp.path[fp.last as usize] += 1;
                 ok
             }
             Op::PopOnePlusN => {
                 let ok = fp.pop(1);
-                fp.path[fp.last] += r.read_ubitvar_fp() as i32 + 1;
+                fp.path[fp.last as usize] += r.read_ubitvar_fp() as i32 + 1;
                 ok
             }
             Op::PopAllButOnePlusOne => {
-                fp.pop(fp.last);
+                fp.pop(fp.last as usize);
                 fp.path[0] += 1;
                 true
             }
             Op::PopAllButOnePlusN => {
-                fp.pop(fp.last);
+                fp.pop(fp.last as usize);
                 fp.path[0] += r.read_ubitvar_fp() as i32 + 1;
                 true
             }
             Op::PopAllButOnePlusNPack3Bits => {
-                fp.pop(fp.last);
+                fp.pop(fp.last as usize);
                 fp.path[0] += r.read_bits(3) as i32 + 1;
                 true
             }
             Op::PopAllButOnePlusNPack6Bits => {
-                fp.pop(fp.last);
+                fp.pop(fp.last as usize);
                 fp.path[0] += r.read_bits(6) as i32 + 1;
                 true
             }
             Op::PopNPlusOne => {
                 let ok = fp.pop(r.read_ubitvar_fp() as usize);
-                fp.path[fp.last] += 1;
+                fp.path[fp.last as usize] += 1;
                 ok
             }
             Op::PopNPlusN => {
                 let ok = fp.pop(r.read_ubitvar_fp() as usize);
-                fp.path[fp.last] += r.read_vari32();
+                fp.path[fp.last as usize] += r.read_vari32();
                 ok
             }
             Op::PopNAndNonTopographical => {
                 let ok = fp.pop(r.read_ubitvar_fp() as usize);
-                for i in 0..=fp.last {
+                for i in 0..=fp.last as usize {
                     if r.read_bool() {
                         fp.path[i] += r.read_vari32();
                     }
@@ -430,7 +436,7 @@ pub fn read_field_paths(r: &mut BitReader, out: &mut Vec<FieldPath>) -> Result<(
                 ok
             }
             Op::NonTopoComplex => {
-                for i in 0..=fp.last {
+                for i in 0..=fp.last as usize {
                     if r.read_bool() {
                         fp.path[i] += r.read_vari32();
                     }
@@ -441,12 +447,12 @@ pub fn read_field_paths(r: &mut BitReader, out: &mut Vec<FieldPath>) -> Result<(
                 if fp.last == 0 {
                     false
                 } else {
-                    fp.path[fp.last - 1] += 1;
+                    fp.path[fp.last as usize - 1] += 1;
                     true
                 }
             }
             Op::NonTopoComplexPack4Bits => {
-                for i in 0..=fp.last {
+                for i in 0..=fp.last as usize {
                     if r.read_bool() {
                         fp.path[i] += r.read_bits(4) as i32 - 7;
                     }

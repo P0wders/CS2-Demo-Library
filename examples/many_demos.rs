@@ -1,5 +1,5 @@
-//! Many demos at once: `match_stats_many` parses them in parallel, one per
-//! CPU core, and returns one result per demo, in order.
+//! Many demos at once: `match_stats_many` parses them in parallel, sharing the
+//! CPU cores between them, and returns one result per demo, in order.
 //!
 //! cargo run --release --example many_demos -- <demo or folder> [more ...]
 //!

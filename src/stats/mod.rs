@@ -48,7 +48,7 @@ pub use utility::{Blind, Grenade, GrenadeKind, Lineup, TRAJECTORY_TICKS, lineups
 use crate::entities::{Entity, EntityOp, FieldPath, handle_to_index};
 use crate::events::GameEvent;
 use crate::model::{Player, RoundEndReason, Team};
-use crate::parser::{Context, Visitor};
+use crate::parser::{Context, EntitySkip, ParseOptions, Visitor};
 use aim::{AimTracker, Hit, Shot};
 use fields::{BodyPaths, ClassKinds, Kind, PawnPaths, Watched};
 use motion::Motion;
@@ -575,7 +575,8 @@ struct Cache {
 /// The [`Visitor`] that builds [`MatchStats`]. Use [`crate::Demo::match_stats`]
 /// for the common case, or drive it yourself next to other visitors. When
 /// wrapping it in your own visitor, forward every callback: it uses game
-/// events, entity updates and tick ends.
+/// events, entity updates and tick ends. Parsing with
+/// [`StatsCollector::parse_options`] leaves out the entity data it doesn't use.
 #[derive(Default)]
 pub struct StatsCollector {
     thresholds: BuyThresholds,
@@ -634,6 +635,30 @@ fn player_key(steam_id: u64, slot: i32) -> u64 {
 impl StatsCollector {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Entity data the statistics never read: chickens, the animation state
+    /// of player pawns and weapons, and the controllers' tick base. Together
+    /// they are about two thirds of a demo's entity data.
+    pub fn entity_skip() -> EntitySkip {
+        EntitySkip {
+            classes: vec!["CChicken".into()],
+            props: vec![
+                "CBodyComponent.m_SerializePoseRecipeAG2Dynamic".into(),
+                "m_pWeaponServices.m_networkAnimTiming".into(),
+                "m_nTickBase".into(),
+            ],
+        }
+    }
+
+    /// Options for a parse that only feeds this collector: everything, minus
+    /// [`StatsCollector::entity_skip`]. When other visitors share the parse,
+    /// use options that keep what they need.
+    pub fn parse_options() -> ParseOptions {
+        ParseOptions {
+            skip: Self::entity_skip(),
+            ..Default::default()
+        }
     }
 
     /// A collector that classifies buys with other thresholds.

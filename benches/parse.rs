@@ -33,6 +33,13 @@ fn bench(c: &mut Criterion) {
     g.bench_function("full", |b| {
         b.iter(|| demo.parse(ParseOptions::default(), &mut ()).unwrap())
     });
+    g.bench_function("full_one_thread", |b| {
+        let one = ParseOptions {
+            threads: 1,
+            ..Default::default()
+        };
+        b.iter(|| demo.parse(one.clone(), &mut ()).unwrap())
+    });
     g.bench_function("match_stats", |b| b.iter(|| demo.match_stats().unwrap()));
     g.finish();
 }

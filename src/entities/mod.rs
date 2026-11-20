@@ -1,15 +1,17 @@
 //! Entity state: classes, per-entity property storage and `svc_PacketEntities` decoding.
 
 pub mod field_path;
+mod job;
 mod value;
 
 pub use field_path::FieldPath;
+pub(crate) use job::{EntityJob, NO_CLASS, RecordKind};
 pub use value::{FromValue, Transform, Value};
 
 use crate::bitreader::{BitReader, CoordParams};
 use crate::error::{Error, Result};
 use crate::sendtables::Serializer;
-use field_path::read_field_paths;
+use field_path::read_field_paths_append;
 use rustc_hash::FxHashMap;
 use std::sync::{Arc, Mutex};
 
@@ -36,7 +38,30 @@ pub struct Class {
     pub id: u32,
     pub name: Arc<str>,
     pub serializer: Arc<Serializer>,
+    /// Decoding this class's fields needs the entity's current state (the
+    /// subtype behind a polymorphic pointer), so it can't be done ahead.
+    pub(crate) needs_state: bool,
+    /// What the parse leaves out of this class (see `ParseOptions::skip`).
+    pub(crate) skip: ClassSkip,
     name_cache: Mutex<FxHashMap<Box<str>, Option<FieldPath>>>,
+}
+
+/// The part of `ParseOptions::skip` that applies to one class.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ClassSkip {
+    /// The whole class: updates aren't decoded.
+    pub all: bool,
+    /// Paths of skipped properties: they and everything below them.
+    pub props: Vec<FieldPath>,
+}
+
+impl ClassSkip {
+    /// Whether a decoded field is kept.
+    #[inline]
+    pub fn keeps(&self, path: &FieldPath) -> bool {
+        let p = path.as_slice();
+        !self.props.iter().any(|s| p.starts_with(s.as_slice()))
+    }
 }
 
 impl Class {
@@ -44,9 +69,23 @@ impl Class {
         Class {
             id,
             name,
+            needs_state: serializer.has_polymorphic_fields(),
+            skip: ClassSkip::default(),
             serializer,
             name_cache: Mutex::new(FxHashMap::default()),
         }
+    }
+
+    /// Takes the part of `skip` that applies to this class.
+    pub(crate) fn set_skip(&mut self, skip: &crate::parser::EntitySkip) {
+        self.skip = ClassSkip {
+            all: skip.classes.iter().any(|c| **c == *self.name),
+            props: skip
+                .props
+                .iter()
+                .filter_map(|name| FieldPath::from_slice(&self.serializer.path_for(name)?))
+                .collect(),
+        };
     }
 
     /// Resolves a dotted property name to its field path (cached per class).
@@ -261,7 +300,7 @@ impl EntityStore {
     }
 }
 
-fn trace_enabled() -> bool {
+pub(crate) fn trace_enabled() -> bool {
     static T: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *T.get_or_init(|| std::env::var_os("CS2_DEMO_TRACE").is_some())
 }
@@ -300,20 +339,35 @@ fn read_fields(
     out: &mut Vec<Value>,
     existing: Option<&PropNode>,
 ) -> Result<()> {
-    read_field_paths(r, paths)?;
-    let trace = trace_enabled();
+    paths.clear();
     out.clear();
-    for fp in paths.iter() {
+    read_fields_append(r, serializer, paths, cp, out, existing)
+}
+
+/// Like [`read_fields`], appending to `paths` and `out`.
+fn read_fields_append(
+    r: &mut BitReader,
+    serializer: &Serializer,
+    paths: &mut Vec<FieldPath>,
+    cp: &CoordParams,
+    out: &mut Vec<Value>,
+    existing: Option<&PropNode>,
+) -> Result<()> {
+    let (paths_base, values_base) = (paths.len(), out.len());
+    read_field_paths_append(r, paths)?;
+    let trace = trace_enabled();
+    for i in paths_base..paths.len() {
+        let fp = paths[i];
         let decoder = {
             let subtype = |p: &[i32]| -> Option<i32> {
-                paths[..out.len()]
+                paths[paths_base..i]
                     .iter()
                     .rposition(|q| q.as_slice() == p)
-                    .map(|i| &out[i])
+                    .map(|j| &out[values_base + j])
                     .or_else(|| existing?.get(p))
                     .and_then(Value::as_i32)
             };
-            serializer.decoder_for_with(fp.as_slice(), &subtype)
+            serializer.decoder_ref(fp.as_slice(), &subtype)
         }
         .ok_or_else(|| {
             Error::malformed(format!(
@@ -380,8 +434,23 @@ fn decode_entity_fields(
     size: Option<usize>,
     existing: Option<&PropNode>,
 ) -> Result<bool> {
+    paths.clear();
+    out.clear();
+    decode_entity_fields_append(r, serializer, paths, cp, out, size, existing)
+}
+
+/// Like [`decode_entity_fields`], appending to `paths` and `out`.
+fn decode_entity_fields_append(
+    r: &mut BitReader,
+    serializer: &Serializer,
+    paths: &mut Vec<FieldPath>,
+    cp: &CoordParams,
+    out: &mut Vec<Value>,
+    size: Option<usize>,
+    existing: Option<&PropNode>,
+) -> Result<bool> {
     let start = r.position();
-    let res = read_fields(r, serializer, paths, cp, out, existing);
+    let res = read_fields_append(r, serializer, paths, cp, out, existing);
     let Some(size) = size else {
         res?;
         return Ok(true);
@@ -554,47 +623,13 @@ impl<'a> PacketEntitiesCursor<'a> {
             .ok_or_else(|| Error::malformed(format!("unknown class id {class_id} for entity {idx}")))?
             .clone();
 
-        let baseline = dec.baselines.entry(class_id).or_insert_with(|| {
-            let mut decoded = Vec::new();
-            let key = class_id.to_string();
-            let raw = env
-                .baselines
-                .and_then(|t| t.find(&key))
-                .and_then(|(_, e)| e.value.as_deref());
-            if let Some(raw) = raw {
-                let mut br = BitReader::new(raw);
-                let res = read_fields(
-                    &mut br,
-                    &class.serializer,
-                    &mut dec.paths,
-                    &env.coord_params,
-                    &mut decoded,
-                    None,
-                );
-                // A correct decode ends inside the final (padding) byte.
-                let res = res.and_then(|()| match br.remaining_bits() {
-                    0..8 => Ok(()),
-                    n => Err(Error::malformed(format!("{n} trailing bits"))),
-                });
-                if let Err(e) = res {
-                    dec.diagnostics.baseline_errors += 1;
-                    dec.diagnostics
-                        .record(|| format!("baseline of {} failed: {e}", class.name));
-                }
-            }
-            dec.paths.iter().copied().zip(decoded).collect()
-        });
-
+        let mut props = baseline_props(dec, class_id, &class, env);
         if trace_enabled() {
             eprintln!(
                 "[trace]   create class {class_id} {} serial {serial} baseline {} props",
                 class.name,
-                baseline.len()
+                props.count()
             );
-        }
-        let mut props = PropNode::default();
-        for (path, v) in baseline.iter() {
-            props.set(path.as_slice(), v.clone());
         }
         let mut values = std::mem::take(&mut dec.values);
         let ok = decode_entity_fields(
@@ -628,4 +663,44 @@ impl<'a> PacketEntitiesCursor<'a> {
         });
         Ok(())
     }
+}
+
+/// Properties of a new entity of `class` before its own field data: its
+/// instance baseline, decoded once per class and cached until invalidated.
+fn baseline_props(dec: &mut EntityDecoder, class_id: u32, class: &Class, env: &DecodeEnv) -> PropNode {
+    let baseline = dec.baselines.entry(class_id).or_insert_with(|| {
+        let mut decoded = Vec::new();
+        let key = class_id.to_string();
+        let raw = env
+            .baselines
+            .and_then(|t| t.find(&key))
+            .and_then(|(_, e)| e.value.as_deref());
+        if let Some(raw) = raw {
+            let mut br = BitReader::new(raw);
+            let res = read_fields(
+                &mut br,
+                &class.serializer,
+                &mut dec.paths,
+                &env.coord_params,
+                &mut decoded,
+                None,
+            );
+            // A correct decode ends inside the final (padding) byte.
+            let res = res.and_then(|()| match br.remaining_bits() {
+                0..8 => Ok(()),
+                n => Err(Error::malformed(format!("{n} trailing bits"))),
+            });
+            if let Err(e) = res {
+                dec.diagnostics.baseline_errors += 1;
+                dec.diagnostics
+                    .record(|| format!("baseline of {} failed: {e}", class.name));
+            }
+        }
+        dec.paths.iter().copied().zip(decoded).collect()
+    });
+    let mut props = PropNode::default();
+    for (path, v) in baseline.iter() {
+        props.set(path.as_slice(), v.clone());
+    }
+    props
 }

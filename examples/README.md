@@ -66,4 +66,4 @@ after a CS2 update changes the demo format. They are not usage guides.
 | `dump_schema` | Every networked class and property, with its encoding: `-- match.dem [CCSPlayerPawn]` |
 | `inspect` | Structural summary: entity counts, string tables, event counts and parse speed |
 | `round_check` | One player's per-round kills and deaths from events, next to the server's per-round counters: `-- match.dem <player>` |
-| `timing` | Parse time of each mode |
+| `timing` | Parse time of each mode, on one thread and on several |

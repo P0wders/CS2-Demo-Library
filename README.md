@@ -20,9 +20,10 @@ for p in &stats.players {
 }
 ```
 
-- **Fast.** On a 342 MB, 48-minute pro demo: game events in 0.13 s, every
-  entity update in under 2 s, all the statistics above in 2.1 s, with about
-  12 MB of memory.
+- **Fast.** On a 355 MB, 54-minute match, on an 8-core desktop: game events
+  in 0.09 s, all the statistics above in 0.6 s, every entity update in 0.9 s.
+  A parse uses several cores and gives exactly the results of a
+  single-threaded one. Saved statistics load back in 3 ms.
 - **Checked.** Every entity update is verified against the bit length the
   server recorded, and kills, deaths and assists match the game's own
   scoreboard: tested on 32 demos from six game builds (tournaments, FACEIT and
@@ -215,20 +216,37 @@ let stats = both.0.into_stats(&ctx);
 
 ### Choosing what to decode
 
-| `ParseOptions` | Time for a 342 MB demo | Use it when |
+| `ParseOptions` | Time for a 355 MB demo | Use it when |
 |---|--:|---|
-| `ParseOptions::default()` | 2 s | you need positions, health, money or any other entity state |
-| `ParseOptions::events_only()` | 0.13 s | game events and player names are enough |
+| `ParseOptions::default()` | 0.9 s | you need positions, health, money or any other entity state |
+| `StatsCollector::parse_options()` | 0.6 s | only the built-in statistics read the parse (what `match_stats()` uses) |
+| `ParseOptions::events_only()` | 0.09 s | game events and player names are enough |
+| `skip: EntitySkip { .. }` | less | your visitor never reads some classes or properties |
+| `threads: 1` | 2.1 s | everything should run on the calling thread |
 | `end_tick: Some(n)`, or `Break` from `on_tick_end` | proportional | you only need part of the demo |
 | `raw_net_messages: true` | +0.04 s | you want `on_net_message` for user messages, chat, … |
+
+A parse with entities uses up to 8 threads (`ParseOptions::threads`; 0, the
+default, picks from the number of cores). A reader thread walks the frames,
+other threads decode entity data ahead, and the calling thread applies it and
+runs your visitor in demo order, so the callbacks are exactly those of a
+single-threaded parse.
+
+`skip` leaves out entity data your visitor doesn't read: entities of a skipped
+class still exist, but their updates aren't decoded; skipped properties aren't
+stored or listed as changed. `StatsCollector::entity_skip()` is what the
+statistics never read (chickens, the animation state of players and weapons,
+the controllers' tick base): three quarters of a demo's entity fields. When
+your own visitor shares the parse with `StatsCollector`, use the default, or a
+skip list that keeps what your visitor reads.
 
 The raw messages are protobuf bytes. Decode them with the types in
 `cs2_demo::proto`, after enabling the `user-messages` feature.
 
 ### Many demos at once
 
-Parsing one demo uses one core. `match_stats_many` parses several in
-parallel, one per core, and returns the results in order:
+`match_stats_many` parses several demos at once, sharing the cores between
+them, and returns the results in order:
 
 ```rust
 let paths = ["a.dem", "b.dem", "c.dem"];
@@ -254,6 +272,9 @@ let stats = cs2_demo::Demo::open("match.dem")?.match_stats()?;
 std::fs::write("stats.json", serde_json::to_string_pretty(&stats)?)?;
 let back: cs2_demo::MatchStats = serde_json::from_str(&std::fs::read_to_string("stats.json")?)?;
 ```
+
+A 54-minute match is 1.1 MB of compact JSON and loads back in about 3 ms, so
+a service can parse each demo once and answer from the saved statistics.
 
 ## What the stats contain
 
@@ -415,20 +436,25 @@ API, with comments. Read them in this order (details in
 
 ## Performance
 
-Measured on Nemiga vs Vitality, Cache (342 MB, 48 minutes, 184,457 ticks) with
-the `timing` example: AMD Ryzen 7 5800X, Windows 11, one thread, file already
-in the OS cache, best of several runs.
+Measured with the `timing` example on a 355 MB, 54-minute Valve matchmaking
+demo (207,782 ticks, 6.06 million entity updates): AMD Ryzen 7 5800X (8 cores,
+16 threads), Windows 11, file already in the OS cache, best of five runs.
 
 | Step | Time | Speed |
 |---|--:|--:|
 | `Demo::open`: map the file, read header and footer | 0.2 ms | |
-| Ready for the first tick: schema, string tables, baselines | 6 ms | |
-| Game events only | 0.13 s | 2.6 GB/s |
-| Full parse: 4.76 million entity updates | 1.95 s | 175 MB/s |
-| `match_stats()`: full parse plus every statistic above | 2.12 s | 162 MB/s |
+| Ready for the first tick: schema, string tables, baselines | 11 ms | |
+| Game events only | 0.09 s | 3.9 GB/s |
+| `match_stats()`: every statistic above | 0.59 s | 600 MB/s |
+| Full parse: every entity update | 0.89 s | 400 MB/s |
+| `match_stats()` on one thread | 1.96 s | 181 MB/s |
+| Full parse on one thread | 2.13 s | 166 MB/s |
+| Load saved `MatchStats` (1.1 MB of JSON, `serde` feature) | 3 ms | |
 
-Memory: about 12 MB besides the memory-mapped file, which stays in the OS page
-cache rather than being copied.
+With 4 threads, `match_stats()` takes 0.8 s; a 174 MB demo takes 0.25 s.
+
+Memory: about 35 MB with the default threads, 16 MB on one thread, besides the
+memory-mapped file, which stays in the OS page cache rather than being copied.
 
 Compile time: about 8 s for the crate itself in release mode, 20 s for a clean
 build of a project using it, dependencies included. The protobuf code is
@@ -439,6 +465,14 @@ What makes it fast:
 
 - The file is memory-mapped instead of read, and a helper thread maps its pages
   just ahead of the parser.
+- Entity data is decoded on several threads. Demos give the bit length of
+  every entity's data, so a reader thread finds where each one starts without
+  decoding it; decoding needs only the entity's class, so other threads do it
+  ahead; the calling thread applies the values in order and runs the visitor.
+  Only the game rules, whose encoding depends on their current state, are
+  decoded on the calling thread.
+- `match_stats()` skips the entity data the statistics never read, so the
+  calling thread applies a quarter of the fields.
 - Frames are decompressed into one reused buffer. Messages you didn't ask for
   are skipped without being decoded or copied, which is why events-only runs
   are 15× faster.
@@ -515,7 +549,7 @@ Not supported or not tested:
 | `sendtables` | the class schema: property types, encoders and decoders |
 | `entities` | field-path decoding, property values, entity state |
 | `events` | game event descriptors and decoded events |
-| `parser` | `DemoParser`, `ParseOptions`, `Visitor` (and tuples of visitors), `Context` |
+| `parser` | `DemoParser`, `ParseOptions` (threads, `EntitySkip`), `Visitor` (and tuples of visitors), `Context` |
 | `model` | `Player`, `TeamInfo`, `GameRules`, `Weapon`, `Team` |
 | `stats` | `StatsCollector` and `MatchStats`: scoreboard, rounds and economy, clutches, grenades and lineups, aim |
 | `maps` | radar calibration: world positions to radar pixels |
@@ -564,7 +598,9 @@ every demo it finds, in parallel. It checks for each one that:
   they agree with the pawn flash state used as a fallback.
 
 A second test runs `match_stats_many` on all the demos and checks it against
-`match_stats`, and that the scouting profiles add up.
+`match_stats`, and that the scouting profiles add up. A third checks that a
+parse on several threads delivers exactly the callbacks of a single-threaded
+one, and that `StatsCollector::entity_skip()` leaves the statistics unchanged.
 
 After a CS2 update, run the suite on a new demo. If decoding breaks,
 `entity_diagnostics()` names the first entity that went wrong, `dump_schema`

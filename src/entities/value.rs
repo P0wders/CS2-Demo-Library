@@ -156,4 +156,10 @@ mod tests {
     fn value_stays_small() {
         assert!(std::mem::size_of::<super::Value>() <= 24);
     }
+
+    #[test]
+    fn field_path_stays_small() {
+        // Decoded fields cross threads as (path, value) pairs.
+        assert!(std::mem::size_of::<crate::entities::FieldPath>() <= 32);
+    }
 }

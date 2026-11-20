@@ -34,11 +34,13 @@
 //!   (see [`match_stats_many`] to parse them in parallel).
 //!
 //! ## Performance
-//! On a 342 MB, 48-minute pro demo (Ryzen 7 5800X): ready for the first tick in
-//! 6 ms, events only 0.13 s (~2.6 GB/s), full entity state 1.95 s (~175 MB/s),
-//! [`Demo::match_stats`] 2.1 s, single-threaded, with ~12 MB of memory besides
-//! the memory-mapped file. Skip what you don't need with [`ParseOptions`];
-//! parse several demos on several threads for throughput.
+//! On a 355 MB, 54-minute demo (Ryzen 7 5800X, 8 cores): ready for the first
+//! tick in 11 ms, events only 0.09 s, [`Demo::match_stats`] 0.6 s, full entity
+//! state 0.9 s (2.1 s on one thread), with ~35 MB of memory besides the
+//! memory-mapped file. A parse with entities uses up to 8 threads and delivers
+//! the same callbacks as on one ([`ParseOptions::threads`]). Leave out what
+//! you don't need with [`ParseOptions`]: events only, or
+//! [`ParseOptions::skip`] for entity data your visitor never reads.
 //!
 //! ## Features
 //! * `serde`: `serde::Serialize` and `Deserialize` for [`stats::MatchStats`]
@@ -72,6 +74,7 @@ pub mod events;
 pub mod maps;
 pub mod model;
 pub mod parser;
+mod pipeline;
 pub mod replay;
 pub mod scouting;
 pub mod sendtables;
@@ -93,7 +96,7 @@ pub use entities::{Entity, EntityOp, Value};
 pub use error::{Error, Result};
 pub use events::{EventValue, GameEvent};
 pub use model::{GameRules, Player, PlayerInfo, RoundEndReason, Team, TeamInfo, Weapon};
-pub use parser::{Context, DemoParser, ParseOptions, Visitor};
+pub use parser::{Context, DemoParser, EntitySkip, ParseOptions, Visitor};
 pub use stats::{MatchStats, StatsCollector};
 
 use std::path::Path;
@@ -181,10 +184,15 @@ impl Demo {
         }
     }
 
-    /// Parses the whole demo with the built-in [`StatsCollector`].
+    /// Parses the whole demo with the built-in [`StatsCollector`] (with
+    /// [`StatsCollector::parse_options`]).
     pub fn match_stats(&self) -> Result<MatchStats> {
+        self.match_stats_with(StatsCollector::parse_options())
+    }
+
+    fn match_stats_with(&self, opts: ParseOptions) -> Result<MatchStats> {
         let mut collector = StatsCollector::new();
-        let ctx = self.parse(ParseOptions::default(), &mut collector)?;
+        let ctx = self.parse(opts, &mut collector)?;
         Ok(collector.into_stats(&ctx))
     }
 
@@ -195,6 +203,7 @@ impl Demo {
         opts: ParseOptions,
         visitor: &mut V,
     ) -> Result<Context> {
+        let opts = ParseOptions { threads: 1, ..opts };
         DemoParser::with_header(self.bytes(), opts, self.header.clone()).run(visitor)
     }
 
@@ -229,8 +238,8 @@ impl Demo {
     }
 }
 
-/// Runs [`Demo::match_stats`] on several demos in parallel, one demo per CPU
-/// core at a time. Results come back in the order of `paths`.
+/// Runs [`Demo::match_stats`] on several demos in parallel, sharing the CPU
+/// cores between them. Results come back in the order of `paths`.
 ///
 /// ```no_run
 /// let results = cs2_demo::match_stats_many(&["a.dem", "b.dem", "c.dem"]);
@@ -241,9 +250,13 @@ impl Demo {
 /// # Ok::<(), cs2_demo::Error>(())
 /// ```
 pub fn match_stats_many<P: AsRef<Path> + Sync>(paths: &[P]) -> Vec<Result<MatchStats>> {
-    let workers = std::thread::available_parallelism()
-        .map_or(1, |n| n.get())
-        .min(paths.len());
+    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let workers = cores.min(paths.len());
+    // Share the cores: with fewer demos than cores, each parse uses several.
+    let opts = ParseOptions {
+        threads: (cores / workers.max(1)).clamp(1, ParseOptions::AUTO_THREADS),
+        ..StatsCollector::parse_options()
+    };
     let next = AtomicUsize::new(0);
     let results: Vec<Mutex<Option<Result<MatchStats>>>> = paths.iter().map(|_| Mutex::new(None)).collect();
     std::thread::scope(|s| {
@@ -252,7 +265,7 @@ pub fn match_stats_many<P: AsRef<Path> + Sync>(paths: &[P]) -> Vec<Result<MatchS
                 loop {
                     let i = next.fetch_add(1, Ordering::Relaxed);
                     let Some(path) = paths.get(i) else { break };
-                    let stats = Demo::open(path).and_then(|d| d.match_stats());
+                    let stats = Demo::open(path).and_then(|d| d.match_stats_with(opts.clone()));
                     *results[i].lock().unwrap_or_else(|e| e.into_inner()) = Some(stats);
                 }
             });

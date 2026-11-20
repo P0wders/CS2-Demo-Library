@@ -97,9 +97,14 @@ pub struct FrameIter<'a> {
 
 impl<'a> FrameIter<'a> {
     pub fn new(data: &'a [u8]) -> Self {
+        Self::at(data, 16)
+    }
+
+    /// Iterates from the frame starting at byte `pos` (see [`Frame::offset`]).
+    pub fn at(data: &'a [u8], pos: usize) -> Self {
         FrameIter {
             data,
-            pos: 16,
+            pos,
             done: false,
         }
     }

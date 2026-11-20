@@ -1048,3 +1048,112 @@ fn stats_json_round_trip() {
     let back: MatchStats = serde_json::from_str(&json).unwrap();
     assert!(back == stats, "JSON round trip changed the stats");
 }
+
+/// Hashes every callback of a parse: entity changes with their new values,
+/// game events, string table changes and tick ends.
+#[derive(Default)]
+struct Fingerprint {
+    hash: std::collections::hash_map::DefaultHasher,
+    entity_changes: u64,
+}
+
+impl Fingerprint {
+    fn value(&mut self, v: &cs2_demo::Value) {
+        use cs2_demo::Value;
+        use std::hash::Hash;
+        let h = &mut self.hash;
+        match v {
+            Value::Bool(b) => (0u8, *b).hash(h),
+            Value::I32(x) => (1u8, *x).hash(h),
+            Value::U32(x) => (2u8, *x).hash(h),
+            Value::I64(x) => (3u8, *x).hash(h),
+            Value::U64(x) => (4u8, *x).hash(h),
+            Value::F32(x) => (5u8, x.to_bits()).hash(h),
+            Value::Vec2(a) => (6u8, a.map(f32::to_bits)).hash(h),
+            Value::Vec3(a) => (7u8, a.map(f32::to_bits)).hash(h),
+            Value::Vec4(a) => (8u8, a.map(f32::to_bits)).hash(h),
+            Value::String(s) => (9u8, s).hash(h),
+            Value::Transform(t) => (10u8, t.pos.map(f32::to_bits), t.rot.map(f32::to_bits)).hash(h),
+            Value::Bytes(b) => (11u8, b).hash(h),
+        }
+    }
+}
+
+impl Visitor for Fingerprint {
+    fn on_entity(&mut self, ctx: &Context, e: &Entity, op: EntityOp, changed: &[FieldPath]) {
+        use std::hash::Hash;
+        self.entity_changes += 1;
+        (
+            ctx.tick(),
+            e.index(),
+            e.serial(),
+            op as u8,
+            e.class_name(),
+            e.is_active(),
+        )
+            .hash(&mut self.hash);
+        for p in changed {
+            p.as_slice().hash(&mut self.hash);
+            match e.value_at(p) {
+                Some(v) => self.value(v),
+                None => 0xFFu8.hash(&mut self.hash),
+            }
+        }
+    }
+    fn on_game_event(&mut self, ctx: &Context, ev: &GameEvent) {
+        use std::hash::Hash;
+        (ctx.tick(), ev.tick, &*ev.name, format!("{:?}", ev.fields)).hash(&mut self.hash);
+    }
+    fn on_string_table(&mut self, ctx: &Context, table: &str, entries: &[usize]) {
+        use std::hash::Hash;
+        (ctx.tick(), table, entries).hash(&mut self.hash);
+    }
+    fn on_tick_end(&mut self, ctx: &Context) -> std::ops::ControlFlow<()> {
+        use std::hash::Hash;
+        ctx.tick().hash(&mut self.hash);
+        std::ops::ControlFlow::Continue(())
+    }
+}
+
+/// Parsing on several threads delivers exactly the callbacks of a
+/// single-threaded parse; skipping the entity data the statistics don't read
+/// leaves the statistics unchanged.
+#[test]
+fn threads_and_skipped_data_change_nothing() {
+    use std::hash::Hasher;
+    let Some(d) = any_demo() else { return };
+    let run = |opts: ParseOptions| {
+        let mut both = (StatsCollector::new(), Fingerprint::default());
+        let ctx = d.parse(opts, &mut both).unwrap();
+        assert_eq!(ctx.entity_diagnostics().size_mismatches, 0);
+        let (collector, fp) = both;
+        (fp.hash.finish(), fp.entity_changes, collector.into_stats(&ctx))
+    };
+    let (hash, changes, stats) = run(ParseOptions {
+        threads: 1,
+        ..Default::default()
+    });
+    for threads in [2, 3, 8] {
+        let (h, c, s) = run(ParseOptions {
+            threads,
+            ..Default::default()
+        });
+        assert_eq!((h, c), (hash, changes), "{threads} threads: other callbacks");
+        assert!(s == stats, "{threads} threads: other statistics");
+    }
+
+    let skip_one = run(ParseOptions {
+        threads: 1,
+        ..StatsCollector::parse_options()
+    });
+    let skip_many = run(StatsCollector::parse_options());
+    assert_eq!((skip_one.0, skip_one.1), (skip_many.0, skip_many.1));
+    assert!(
+        skip_one.1 < changes / 2,
+        "{} of {changes} changes left",
+        skip_one.1
+    );
+    assert!(skip_one.2 == stats, "skipping changed the statistics");
+    assert!(skip_many.2 == stats, "skipping changed the statistics");
+    assert!(d.match_stats().unwrap() == stats);
+}
