@@ -10,12 +10,16 @@ A demo is a stream of compressed frames. Each layer below is decoded by its own 
          ├─ class schema: flattened serializers -> decoders      sendtables
          ├─ entity updates: Huffman-coded field paths + values   entities
          └─ game events: descriptor list, then events            events
-              └─ Visitor callbacks with the current Context
+              └─ Visitor callbacks with the current Context, in demo order
                    ├─ typed views: Player, TeamInfo, GameRules    model
                    ├─ StatsCollector -> MatchStats                stats
                    ├─ PositionRecorder -> replay frames           replay
                    └─ many MatchStats -> team and player profiles scouting
 ```
+
+## Threads
+
+A parse with entities runs as a pipeline. A reader thread walks the frames and finds where each entity's data starts from the bit length the demo records for it; decoding threads decode the fields, which needs only the entity's class; the calling thread applies the values in order and runs the visitor. Classes whose encoding depends on entity state (the game rules) are decoded on the calling thread, and demos without entity lengths fall back to the one-step decoder. See [Choosing what to decode](Parse-options.md#threads).
 
 ## Modules
 
@@ -27,7 +31,7 @@ A demo is a stream of compressed frames. Each layer below is decoded by its own 
 | `sendtables` | the class schema: property types, encoders and decoders |
 | `entities` | field-path decoding, property values, entity state |
 | `events` | game event descriptors and decoded events |
-| `parser` | `DemoParser`, `ParseOptions`, `Visitor` (and tuples of visitors), `Context` |
+| `parser` | `DemoParser`, `ParseOptions` (threads, `EntitySkip`), `Visitor` (and tuples of visitors), `Context` |
 | `model` | `Player`, `TeamInfo`, `GameRules`, `Weapon`, `Team` |
 | `stats` | `StatsCollector` and `MatchStats`: scoreboard, rounds and economy, clutches, grenades and lineups, aim |
 | `maps` | radar calibration: world positions to radar pixels |

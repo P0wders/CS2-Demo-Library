@@ -25,7 +25,7 @@ const byId = id => FLAT.find(f => f.id.toLowerCase() === String(id).toLowerCase(
 const API = [
   ["Demo::open", "Getting-started"], ["Demo::read_header", "Getting-started"], ["Demo::match_stats", "Match-statistics"],
   ["Demo::for_each_event", "Game-events"], ["Demo::parse", "Visitor"], ["Visitor", "Visitor"], ["Context", "Game-state"],
-  ["StatsCollector", "Visitor"], ["ParseOptions::events_only", "Parse-options"], ["parse_single_threaded", "Parse-options"],
+  ["StatsCollector", "Visitor"], ["ParseOptions::events_only", "Parse-options"], ["parse_single_threaded", "Parse-options"], ["ParseOptions::threads", "Parse-options"], ["EntitySkip", "Parse-options"], ["StatsCollector::parse_options", "Parse-options"],
   ["match_stats_many", "Many-demos"], ["Scouting::team", "Scouting"], ["Scouting::alias", "Scouting"],
   ["PositionRecorder", "Replay-viewer"], ["MapOverview", "Replay-viewer"], ["to_radar", "Replay-viewer"],
   ["round_kills", "Stats-reference"], ["lineups", "Stats-reference"], ["entity_diagnostics", "Compatibility"],
@@ -227,7 +227,7 @@ function load(id) {
 // ───────── Shell ─────────
 function renderShell() {
   document.body.innerHTML = `
-  <header class="topbar">
+  <header class="topbar"><div class="topbar-inner">
     <button class="icon-btn menu-btn" id="menu" aria-label="Open menu">${I.menu}</button>
     <a class="brand" href="#/Home"><span class="brand-mark">${LOGO}</span><span class="brand-name">cs2_demo</span><span class="brand-tag">wiki</span></a>
     <button class="search-btn" id="search">${I.search}<span>Search the wiki…</span><kbd>Ctrl K</kbd></button>
@@ -235,11 +235,12 @@ function renderShell() {
       <a href="#/Examples"><span>Examples</span></a>
       <a class="gh" href="${REPO}" target="_blank" rel="noopener">${I.github}<span>GitHub</span></a>
       <button class="icon-btn" id="theme" aria-label="Toggle theme"></button>
-    </nav>
+    </nav></div>
+    <nav class="tabs" id="tabs">${NAV.map(g => `<a href="${route(g.items[0][0])}" data-group="${g.title}">${g.title}</a>`).join("")}</nav>
   </header>
   <div class="shell">
     <aside class="sidebar" id="sidebar">
-      ${NAV.map(g => `<div class="nav-group"><div class="nav-title">${g.title}</div>
+      ${NAV.map(g => `<div class="nav-group" data-group="${g.title}"><div class="nav-title">${g.title}</div>
         ${g.items.map(([id, l]) => `<a href="${route(id)}" data-id="${id}">${l}</a>`).join("")}</div>`).join("")}
       <div class="side-foot">Apache-2.0 · <a href="${REPO}" target="_blank" rel="noopener">P0wders/CS2-Demo-Library</a><br>Tested on CS2 builds 10680–10955</div>
     </aside>
@@ -258,7 +259,7 @@ function homeHtml(page) {
   return `
   <section class="hero">
     <div class="eyebrow"><b>Rust</b> Parser &amp; match analyzer for Counter-Strike 2</div>
-    <h1>Every tick of a CS2 demo, <em>in two seconds.</em></h1>
+    <h1>Every tick of a CS2 demo,<br><em>in under a second.</em></h1>
     <p class="lead">cs2_demo reads <code>.dem</code> files from scratch and gives you the game events, the full game state at every tick, and the numbers a team analyst works with.</p>
     <div class="actions">
       <a class="btn primary" href="#/Getting-started">Get started ${I.arrow}</a>
@@ -273,9 +274,9 @@ for p in &stats.players {
   </section>
 
   <div class="stats">
-    <div class="stat"><b>0.13<small>s</small></b><span>Game events, 342 MB demo</span></div>
-    <div class="stat"><b>2.1<small>s</small></b><span>Full parse + every statistic</span></div>
-    <div class="stat"><b>12<small>MB</small></b><span>Memory beside the mapped file</span></div>
+    <div class="stat"><b>0.09<small>s</small></b><span>Game events, 355 MB demo</span></div>
+    <div class="stat"><b>0.6<small>s</small></b><span>Every statistic, on 8 cores</span></div>
+    <div class="stat"><b>3<small>ms</small></b><span>Load saved stats back</span></div>
     <div class="stat"><b>32</b><span>Demos tested, bit-exact</span></div>
   </div>
 
@@ -321,6 +322,9 @@ async function renderPage() {
   if (item && current === item.id) { scrollToAnchor(anchor); return; }
   const main = $("#main");
   document.querySelectorAll(".nav-group a").forEach(a => a.classList.toggle("active", item && a.dataset.id === item.id));
+  document.querySelectorAll(".tabs a").forEach(a => a.classList.toggle("active", item && a.dataset.group === item.group));
+  document.querySelectorAll(".nav-group").forEach(g => g.classList.toggle("off", !item || g.dataset.group !== item.group));
+  document.body.classList.toggle("is-home", !!item && item.id === "Home");
   if (!item) {
     current = null; main.className = "main";
     main.innerHTML = `<article class="content notfound"><h1>Page not found</h1><p class="lead">There is no page called “${esc(id)}”.</p><a class="btn" href="#/Home">Back to the introduction</a></article>`;
@@ -466,6 +470,7 @@ function go(x) { closeSearch(); location.hash = route(x.id, x.anchor); }
 
 // ───────── Boot ─────────
 renderShell();
+document.body.classList.add("layout");
 let saved = null; try { saved = localStorage.getItem("theme"); } catch {}
 setTheme(new URLSearchParams(location.search).get("theme") || saved || "dark");
 $("#theme").onclick = () => setTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");

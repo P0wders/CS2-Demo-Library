@@ -27,7 +27,7 @@ It parses every demo it finds, in parallel, and checks for each one that:
 - kill, setup and grenade positions fall on the map's radar image and cover most of it;
 - flash statistics are filled in, and where a demo has `player_blind` events, they agree with the pawn flash state used as a fallback.
 
-A second test runs `match_stats_many` on all the demos and checks it against `match_stats`, and that the scouting profiles add up.
+A second test runs `match_stats_many` on all the demos and checks it against `match_stats`, and that the scouting profiles add up. A third checks that a parse on several threads delivers exactly the callbacks of a single-threaded one, and that `StatsCollector::entity_skip()` leaves the statistics unchanged.
 
 ## After a CS2 update
 

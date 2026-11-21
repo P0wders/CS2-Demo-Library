@@ -57,6 +57,8 @@ let ctx = demo.parse(ParseOptions::default(), &mut both)?;
 let stats = both.0.into_stats(&ctx);
 ```
 
+`match_stats()` skips entity data the statistics never read. A shared parse decodes everything by default, so your visitor sees every property; see [Skipping entity data](Parse-options.md#skipping-entity-data).
+
 > [!NOTE]
 > If you only need events (a kill feed, a counter), [`for_each_event`](Game-events.md) is simpler and skips entity decoding entirely.
 
